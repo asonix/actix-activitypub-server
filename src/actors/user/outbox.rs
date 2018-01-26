@@ -1,18 +1,19 @@
-use actix::{Actor, Address, Arbiter, Context, Handler};
+use actix::{Actor, Address, Arbiter, Context, Handler, SyncAddress};
 use futures::Future;
 
-use actors::posts::Posts;
-use actors::posts::messages::NewPost;
 use actors::dispatch::Dispatch;
 use actors::dispatch::messages::{DispatchAcceptFollowRequest, DispatchDenyFollowRequest,
                                  DispatchFollowRequest, DispatchPost};
+use actors::posts::Posts;
+use actors::posts::messages::NewPost;
+use actors::users::Users;
 use super::messages::*;
 use super::{User, UserId};
 
 pub struct Outbox {
     user_id: UserId,
     user: Address<User>,
-    posts: Address<Posts>,
+    posts: SyncAddress<Posts>,
     dispatch: Address<Dispatch>,
 }
 
@@ -20,9 +21,11 @@ impl Outbox {
     pub fn new(
         user_id: UserId,
         user: Address<User>,
-        posts: Address<Posts>,
-        dispatch: Address<Dispatch>,
+        posts: SyncAddress<Posts>,
+        users: SyncAddress<Users>,
     ) -> Self {
+        let dispatch = Dispatch::new(users).start();
+
         Outbox {
             user_id,
             user,

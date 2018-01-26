@@ -1,4 +1,4 @@
-use actix::{Actor, Address, Arbiter, Context, Handler};
+use actix::{Actor, Arbiter, Context, Handler, SyncAddress};
 use futures::Future;
 
 use super::{PostId, UserId};
@@ -11,11 +11,11 @@ pub mod messages;
 use self::messages::*;
 
 pub struct Dispatch {
-    users: Address<Users>,
+    users: SyncAddress<Users>,
 }
 
 impl Dispatch {
-    pub fn new(users: Address<Users>) -> Self {
+    pub fn new(users: SyncAddress<Users>) -> Self {
         Dispatch { users }
     }
 }
