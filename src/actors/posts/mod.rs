@@ -9,6 +9,8 @@ pub mod messages;
 
 use self::messages::*;
 
+const BACKFILL_CHUNK_SIZE: usize = 100;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Post {
     post_id: PostId,
@@ -169,7 +171,10 @@ impl Handler<RequestPeers> for Posts {
 impl Handler<ReplyPeers> for Posts {
     type Result = ();
 
-    fn handle(&mut self, msg: ReplyPeers, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: ReplyPeers, ctx: &mut Context<Self>) -> Self::Result {
+        for peer in &msg.0 {
+            peer.send(AnnounceRedundancy(ctx.address()));
+        }
         self.redundancy.extend(msg.0);
     }
 }
@@ -181,7 +186,7 @@ impl Handler<RequestBackfill> for Posts {
         let backfill = self.posts
             .iter()
             .skip(msg.1)
-            .take(100)
+            .take(BACKFILL_CHUNK_SIZE)
             .map(|(a, b)| (a.clone(), b.clone()))
             .collect();
 
@@ -193,10 +198,10 @@ impl Handler<ReplyBackfill> for Posts {
     type Result = ();
 
     fn handle(&mut self, msg: ReplyBackfill, ctx: &mut Context<Self>) -> Self::Result {
-        if msg.1.len() == 100 {
+        if msg.1.len() == BACKFILL_CHUNK_SIZE {
             self.redundancy
                 .get(0)
-                .map(|node| node.send(RequestBackfill(ctx.address(), msg.0 + 100)));
+                .map(|node| node.send(RequestBackfill(ctx.address(), msg.0 + BACKFILL_CHUNK_SIZE)));
         }
 
         self.posts.extend(msg.1);

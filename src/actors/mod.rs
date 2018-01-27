@@ -74,13 +74,13 @@ impl PartialOrd for UserId {
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
-    use std::thread;
 
     use actix::{Actor, Arbiter, SyncAddress, System};
     use actix::msgs::{Execute, SystemExit};
     use futures::{Future, Stream};
     use futures::future;
     use futures::stream::iter_ok;
+    use tokio_core::reactor::Timeout;
 
     use super::{Id, UserId};
     use super::posts::Posts;
@@ -91,9 +91,10 @@ mod tests {
     use super::users::messages::{Lookup, NewUser, PeerSize as UserPeerSize, UserSize};
 
     #[test]
-    fn users_peering() {
+    fn users_and_posts_peering() {
         let system = System::new("test");
         let arbiter = Arbiter::new("test-exec");
+        let handle = Arbiter::handle();
 
         let posts_1: SyncAddress<_> = Posts::new(Id(0)).start();
         let posts_2: SyncAddress<_> = Posts::new(Id(1)).add_peer(posts_1.clone()).start();
@@ -107,52 +108,69 @@ mod tests {
             .add_peer(users_2.clone())
             .start();
 
-        let fut_1 = posts_1
-            .call_fut(PostPeerSize)
+        let ping_1 = posts_1.call_fut(PostSize);
+        let ping_2 = posts_2.call_fut(PostSize);
+        let ping_3 = posts_3.call_fut(PostSize);
+        let ping_4 = users_1.call_fut(UserSize);
+        let ping_5 = users_2.call_fut(UserSize);
+        let ping_6 = users_3.call_fut(UserSize);
+
+        let timeout = Timeout::new(Duration::from_secs(1), &handle).unwrap();
+
+        let fut = ping_1
+            .and_then(|_| ping_2)
+            .and_then(|_| ping_3)
+            .and_then(|_| ping_4)
+            .and_then(|_| ping_5)
+            .and_then(|_| ping_6)
             .map_err(|_| ())
-            .and_then(|res| res)
-            .map(|peer_size| assert_eq!(peer_size, 3, "posts_1 has {} peers, should have {}", peer_size, 3));
+            .and_then(|_| timeout.map_err(|_| ()))
+            .and_then(move |_| {
+                let fut_1 = posts_1
+                    .call_fut(PostPeerSize)
+                    .map_err(|_| ())
+                    .and_then(|res| res)
+                    .map(|peer_size| assert_eq!(peer_size, 2));
 
-        let fut_2 = posts_2
-            .call_fut(PostPeerSize)
-            .map_err(|_| ())
-            .and_then(|res| res)
-            .map(|peer_size| assert_eq!(peer_size, 3, "posts_2 has {} peers, should have {}", peer_size, 3));
+                let fut_2 = posts_2
+                    .call_fut(PostPeerSize)
+                    .map_err(|_| ())
+                    .and_then(|res| res)
+                    .map(|peer_size| assert_eq!(peer_size, 2));
 
-        let fut_3 = posts_3
-            .call_fut(PostPeerSize)
-            .map_err(|_| ())
-            .and_then(|res| res)
-            .map(|peer_size| assert_eq!(peer_size, 3, "posts_3 has {} peers, should have {}", peer_size, 3));
+                let fut_3 = posts_3
+                    .call_fut(PostPeerSize)
+                    .map_err(|_| ())
+                    .and_then(|res| res)
+                    .map(|peer_size| assert_eq!(peer_size, 2));
 
-        let fut_4 = users_1
-            .call_fut(UserPeerSize)
-            .map_err(|_| ())
-            .and_then(|res| res)
-            .map(|peer_size| assert_eq!(peer_size, 3, "users_1 has {} peers, should have {}", peer_size, 3));
+                let fut_4 = users_1
+                    .call_fut(UserPeerSize)
+                    .map_err(|_| ())
+                    .and_then(|res| res)
+                    .map(|peer_size| assert_eq!(peer_size, 2));
 
-        let fut_5 = users_2
-            .call_fut(UserPeerSize)
-            .map_err(|_| ())
-            .and_then(|res| res)
-            .map(|peer_size| assert_eq!(peer_size, 3, "users_2 has {} peers, should have {}", peer_size, 3));
+                let fut_5 = users_2
+                    .call_fut(UserPeerSize)
+                    .map_err(|_| ())
+                    .and_then(|res| res)
+                    .map(|peer_size| assert_eq!(peer_size, 2));
 
-        let fut_6 = users_3
-            .call_fut(UserPeerSize)
-            .map_err(|_| ())
-            .and_then(|res| res)
-            .map(|peer_size| assert_eq!(peer_size, 3, "users_3 has {} peers, should have {}", peer_size, 3));
+                let fut_6 = users_3
+                    .call_fut(UserPeerSize)
+                    .map_err(|_| ())
+                    .and_then(|res| res)
+                    .map(|peer_size| assert_eq!(peer_size, 2));
 
-        let fut = fut_1
-            .and_then(|_| fut_2)
-            .and_then(|_| fut_3)
-            .and_then(|_| fut_4)
-            .and_then(|_| fut_5)
-            .and_then(|_| fut_6);
+                fut_1
+                    .and_then(|_| fut_2)
+                    .and_then(|_| fut_3)
+                    .and_then(|_| fut_4)
+                    .and_then(|_| fut_5)
+                    .and_then(|_| fut_6)
+        });
 
-        thread::sleep(Duration::from_secs(1));
-
-        Arbiter::handle().spawn(
+        handle.spawn(
             arbiter
                 .call_fut(Execute::new(|| Ok(Arbiter::name())))
                 .map_err(|_| ())

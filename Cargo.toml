@@ -7,3 +7,6 @@ authors = ["Riley Trautman <asonix.dev@gmail.com>"]
 actix = "0.4"
 actix-web = "0.3"
 futures = "0.1"
+
+[dev-dependencies]
+tokio-core = "0.1"

@@ -12,6 +12,8 @@ pub mod messages;
 
 use self::messages::*;
 
+const BACKFILL_CHUNK_SIZE: usize = 100;
+
 #[derive(Clone)]
 pub struct UserAddress {
     user: SyncAddress<User>,
@@ -192,7 +194,11 @@ impl Handler<RequestPeers> for Users {
 impl Handler<ReplyPeers> for Users {
     type Result = ();
 
-    fn handle(&mut self, msg: ReplyPeers, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: ReplyPeers, ctx: &mut Context<Self>) -> Self::Result {
+        for peer in &msg.0 {
+            peer.send(AnnounceRedundancy(ctx.address()));
+        }
+
         self.redundancy.extend(msg.0);
     }
 }
@@ -204,7 +210,7 @@ impl Handler<RequestBackfill> for Users {
         let backfill = self.users
             .iter()
             .skip(msg.1)
-            .take(100)
+            .take(BACKFILL_CHUNK_SIZE)
             .map(|(a, b)| (a.clone(), b.clone()))
             .collect();
 
@@ -216,10 +222,10 @@ impl Handler<ReplyBackfill> for Users {
     type Result = ();
 
     fn handle(&mut self, msg: ReplyBackfill, ctx: &mut Context<Self>) -> Self::Result {
-        if msg.1.len() == 100 {
+        if msg.1.len() == BACKFILL_CHUNK_SIZE {
             self.redundancy
                 .get(0)
-                .map(|node| node.send(RequestBackfill(ctx.address(), msg.0 + 100)));
+                .map(|node| node.send(RequestBackfill(ctx.address(), msg.0 + BACKFILL_CHUNK_SIZE)));
         }
 
         self.users.extend(msg.1);
