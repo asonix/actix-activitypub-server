@@ -13,6 +13,7 @@ use self::messages::*;
 pub struct User {
     user_id: UserId,
     posts: BTreeSet<PostId>,
+    my_posts: BTreeSet<PostId>,
     followers: BTreeSet<UserId>,
     following: BTreeSet<UserId>,
     follow_requests: BTreeSet<UserId>,
@@ -24,11 +25,89 @@ impl User {
         User {
             user_id: user_id,
             posts: BTreeSet::new(),
+            my_posts: BTreeSet::new(),
             followers: BTreeSet::new(),
             following: BTreeSet::new(),
             follow_requests: BTreeSet::new(),
             pending_follows: BTreeSet::new(),
         }
+    }
+
+    pub fn get_10_user_post_ids(&self) -> Vec<PostId> {
+        self.my_posts.iter().rev().take(10).cloned().collect()
+    }
+
+    pub fn get_10_post_ids(&self) -> Vec<PostId> {
+        let p1 = self.posts.iter().rev().peekable();
+        let p2 = self.my_posts.iter().rev().peekable();
+
+        // Basically merge-sort
+        let (_, _, post_ids) =
+            (0..10).fold((p1, p2, Vec::new()), |(mut p1, mut p2, mut vec), _| {
+                let use_p2 = {
+                    let joined = p1.peek().and_then(|v1| p2.peek().map(|v2| (v1, v2)));
+
+                    if let Some((v1, v2)) = joined {
+                        Some(v1 < v2)
+                    } else {
+                        None
+                    }
+                };
+
+                let use_p2 = if let Some(use_p2) = use_p2 {
+                    use_p2
+                } else {
+                    p2.peek().is_some()
+                };
+
+                let post_id = if use_p2 {
+                    p2.next().cloned()
+                } else {
+                    p1.next().cloned()
+                };
+
+                if let Some(post_id) = post_id {
+                    vec.push(post_id)
+                }
+
+                (p1, p2, vec)
+            });
+
+        post_ids
+    }
+
+    fn new_post(&mut self, post_id: PostId, user_id: UserId) {
+        if user_id == self.user_id {
+            self.my_posts.insert(post_id);
+        } else {
+            self.posts.insert(post_id);
+        }
+    }
+
+    fn followers(&self) -> Vec<UserId> {
+        self.followers.iter().cloned().collect()
+    }
+
+    fn follow_request(&mut self, user_id: UserId) {
+        self.follow_requests.insert(user_id);
+    }
+
+    fn answer_follow_request(&mut self, user_id: UserId) -> UserId {
+        self.follow_requests.remove(&user_id);
+        self.user_id
+    }
+
+    fn request_follow(&mut self, user_id: UserId) {
+        self.pending_follows.insert(user_id);
+    }
+
+    fn follow_request_accepted(&mut self, user_id: UserId) {
+        self.pending_follows.remove(&user_id);
+        self.following.insert(user_id);
+    }
+
+    fn follow_request_denied(&mut self, user_id: UserId) {
+        self.pending_follows.remove(&user_id);
     }
 }
 
@@ -40,9 +119,23 @@ impl Handler<NewPostIn> for User {
     type Result = ();
 
     fn handle(&mut self, msg: NewPostIn, _: &mut Context<Self>) -> Self::Result {
-        let NewPostIn(post_id) = msg;
+        self.new_post(msg.0, msg.1);
+    }
+}
 
-        self.posts.insert(post_id);
+impl Handler<GetPostIds> for User {
+    type Result = Result<Vec<PostId>, ()>;
+
+    fn handle(&mut self, _: GetPostIds, _: &mut Context<Self>) -> Self::Result {
+        Ok(self.get_10_post_ids())
+    }
+}
+
+impl Handler<GetUserPostIds> for User {
+    type Result = Result<Vec<PostId>, ()>;
+
+    fn handle(&mut self, _: GetUserPostIds, _: &mut Context<Self>) -> Self::Result {
+        Ok(self.get_10_user_post_ids())
     }
 }
 
@@ -50,87 +143,54 @@ impl Handler<GetFollowers> for User {
     type Result = Result<Vec<UserId>, ()>;
 
     fn handle(&mut self, _: GetFollowers, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.followers.iter().cloned().collect())
+        Ok(self.followers())
     }
 }
 
 impl Handler<FollowRequest> for User {
     type Result = ();
 
-    fn handle(&mut self, follow_request: FollowRequest, _: &mut Context<Self>) -> Self::Result {
-        let FollowRequest(user_id) = follow_request;
-
-        self.follow_requests.insert(user_id);
+    fn handle(&mut self, msg: FollowRequest, _: &mut Context<Self>) -> Self::Result {
+        self.follow_request(msg.0);
     }
 }
 
 impl Handler<AcceptFollowRequest> for User {
     type Result = Result<UserId, ()>;
 
-    fn handle(
-        &mut self,
-        accept_follow_request: AcceptFollowRequest,
-        _: &mut Context<Self>,
-    ) -> Self::Result {
-        let AcceptFollowRequest(user_id) = accept_follow_request;
-
-        self.follow_requests.remove(&user_id);
-
-        Ok(self.user_id)
+    fn handle(&mut self, msg: AcceptFollowRequest, _: &mut Context<Self>) -> Self::Result {
+        Ok(self.answer_follow_request(msg.0))
     }
 }
 
 impl Handler<DenyFollowRequest> for User {
     type Result = Result<UserId, ()>;
 
-    fn handle(
-        &mut self,
-        deny_follow_request: DenyFollowRequest,
-        _: &mut Context<Self>,
-    ) -> Self::Result {
-        let DenyFollowRequest(user_id) = deny_follow_request;
-
-        self.follow_requests.remove(&user_id);
-
-        Ok(self.user_id)
+    fn handle(&mut self, msg: DenyFollowRequest, _: &mut Context<Self>) -> Self::Result {
+        Ok(self.answer_follow_request(msg.0))
     }
 }
 
 impl Handler<RequestFollow> for User {
     type Result = ();
 
-    fn handle(&mut self, request_follow: RequestFollow, _: &mut Context<Self>) -> Self::Result {
-        let RequestFollow(user_id) = request_follow;
-
-        self.pending_follows.insert(user_id);
+    fn handle(&mut self, msg: RequestFollow, _: &mut Context<Self>) -> Self::Result {
+        self.request_follow(msg.0);
     }
 }
 
 impl Handler<FollowRequestAccepted> for User {
     type Result = ();
 
-    fn handle(
-        &mut self,
-        follow_request_accepted: FollowRequestAccepted,
-        _: &mut Context<Self>,
-    ) -> Self::Result {
-        let FollowRequestAccepted(user_id) = follow_request_accepted;
-
-        self.pending_follows.remove(&user_id);
-        self.following.insert(user_id);
+    fn handle(&mut self, msg: FollowRequestAccepted, _: &mut Context<Self>) -> Self::Result {
+        self.follow_request_accepted(msg.0);
     }
 }
 
 impl Handler<FollowRequestDenied> for User {
     type Result = ();
 
-    fn handle(
-        &mut self,
-        follow_request_denied: FollowRequestDenied,
-        _: &mut Context<Self>,
-    ) -> Self::Result {
-        let FollowRequestDenied(user_id) = follow_request_denied;
-
-        self.pending_follows.remove(&user_id);
+    fn handle(&mut self, msg: FollowRequestDenied, _: &mut Context<Self>) -> Self::Result {
+        self.follow_request_denied(msg.0);
     }
 }

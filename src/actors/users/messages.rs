@@ -44,9 +44,44 @@ impl ResponseType for AnnounceRedundancy {
     type Error = ();
 }
 
-pub struct ReplyRedundancy(pub SyncAddress<Users>);
+pub struct RequestPeers(pub SyncAddress<Users>);
 
-impl ResponseType for ReplyRedundancy {
+impl ResponseType for RequestPeers {
     type Item = ();
+    type Error = ();
+}
+
+pub struct ReplyPeers(pub Vec<SyncAddress<Users>>);
+
+impl ResponseType for ReplyPeers {
+    type Item = ();
+    type Error = ();
+}
+
+pub struct RequestBackfill(pub SyncAddress<Users>, pub usize);
+
+impl ResponseType for RequestBackfill {
+    type Item = ();
+    type Error = ();
+}
+
+pub struct ReplyBackfill(pub usize, pub Vec<(UserId, UserAddress)>);
+
+impl ResponseType for ReplyBackfill {
+    type Item = ();
+    type Error = ();
+}
+
+pub struct PeerSize;
+
+impl ResponseType for PeerSize {
+    type Item = usize;
+    type Error = ();
+}
+
+pub struct UserSize;
+
+impl ResponseType for UserSize {
+    type Item = usize;
     type Error = ();
 }

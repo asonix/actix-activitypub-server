@@ -45,18 +45,19 @@ impl Handler<NewPostOut> for Outbox {
     fn handle(&mut self, _: NewPostOut, _: &mut Context<Self>) -> Self::Result {
         let dispatch = self.dispatch.clone();
         let user = self.user.clone();
+        let user_id = self.user_id;
 
         let fut = self.posts
-            .call_fut(NewPost)
+            .call_fut(NewPost(user_id))
             .join(self.user.call_fut(GetFollowers))
             .map_err(|_| ())
             .and_then(move |(post_result, followers_result)| {
                 let res = post_result.and_then(|pid| followers_result.map(|f| (pid, f)));
 
                 if let Ok((post_id, recipients)) = res {
-                    user.send(NewPostIn(post_id));
+                    user.send(NewPostIn(post_id, user_id));
 
-                    dispatch.send(DispatchPost(post_id, recipients));
+                    dispatch.send(DispatchPost(post_id, user_id, recipients));
                 }
 
                 Ok(())
@@ -72,10 +73,8 @@ impl Handler<RequestFollow> for Outbox {
     fn handle(&mut self, msg: RequestFollow, _: &mut Context<Self>) -> Self::Result {
         self.user.send(msg);
 
-        let RequestFollow(user_id) = msg;
-
         self.dispatch
-            .send(DispatchFollowRequest::new(self.user_id, user_id));
+            .send(DispatchFollowRequest::new(self.user_id, msg.0));
     }
 }
 
@@ -85,10 +84,8 @@ impl Handler<AcceptFollowRequest> for Outbox {
     fn handle(&mut self, msg: AcceptFollowRequest, _: &mut Context<Self>) -> Self::Result {
         self.user.send(msg);
 
-        let AcceptFollowRequest(user_id) = msg;
-
         self.dispatch
-            .send(DispatchAcceptFollowRequest::new(self.user_id, user_id));
+            .send(DispatchAcceptFollowRequest::new(self.user_id, msg.0));
 
         Ok(self.user_id)
     }
@@ -100,10 +97,8 @@ impl Handler<DenyFollowRequest> for Outbox {
     fn handle(&mut self, msg: DenyFollowRequest, _: &mut Context<Self>) -> Self::Result {
         self.user.send(msg);
 
-        let DenyFollowRequest(user_id) = msg;
-
         self.dispatch
-            .send(DispatchDenyFollowRequest::new(self.user_id, user_id));
+            .send(DispatchDenyFollowRequest::new(self.user_id, msg.0));
 
         Ok(self.user_id)
     }

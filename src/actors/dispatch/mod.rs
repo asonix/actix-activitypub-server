@@ -28,7 +28,7 @@ impl Handler<DispatchPost> for Dispatch {
     type Result = ();
 
     fn handle(&mut self, msg: DispatchPost, _: &mut Context<Self>) -> Self::Result {
-        let DispatchPost(post_id, user_ids) = msg;
+        let DispatchPost(post_id, user_id, user_ids) = msg;
 
         let fut = self.users
             .call_fut(LookupMany(user_ids))
@@ -36,7 +36,7 @@ impl Handler<DispatchPost> for Dispatch {
             .and_then(|result| result)
             .and_then(move |(addrs, _)| {
                 for addr in addrs {
-                    addr.inbox().send(NewPostIn(post_id));
+                    addr.inbox().send(NewPostIn(post_id, user_id));
                 }
 
                 Ok(())

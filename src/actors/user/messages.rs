@@ -1,9 +1,10 @@
-use actix::ResponseType;
+use actix::{ResponseType, SyncAddress};
 
 use super::{PostId, UserId};
+use actors::posts::Posts;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct NewPostIn(pub PostId);
+pub struct NewPostIn(pub PostId, pub UserId);
 
 impl ResponseType for NewPostIn {
     type Item = ();
@@ -15,6 +16,27 @@ pub struct NewPostOut;
 
 impl ResponseType for NewPostOut {
     type Item = ();
+    type Error = ();
+}
+
+pub struct GetPostIds;
+
+impl ResponseType for GetPostIds {
+    type Item = Vec<PostId>;
+    type Error = ();
+}
+
+pub struct GetUserPostIds;
+
+impl ResponseType for GetUserPostIds {
+    type Item = Vec<PostId>;
+    type Error = ();
+}
+
+pub struct GetPosts;
+
+impl ResponseType for GetPosts {
+    type Item = SyncAddress<Posts>;
     type Error = ();
 }
 

@@ -3,7 +3,7 @@ use actix::ResponseType;
 use super::{PostId, UserId};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DispatchPost(pub PostId, pub Vec<UserId>);
+pub struct DispatchPost(pub PostId, pub UserId, pub Vec<UserId>);
 
 impl ResponseType for DispatchPost {
     type Item = ();
