@@ -1,6 +1,7 @@
 // use actix::{Actor, Address};
 
 pub mod dispatch;
+pub mod peered;
 pub mod posts;
 pub mod user;
 pub mod users;

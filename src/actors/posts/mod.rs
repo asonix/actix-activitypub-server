@@ -1,39 +1,22 @@
 use std::collections::BTreeMap;
-use std::cmp::Ordering;
 
 use actix::{Actor, AsyncContext, Context, Handler, SyncAddress};
 
 use super::{Id, PostId, PostsId, UserId};
+use super::peered::{PeeredInner, HandleMessage, HandleAnnounce};
 
 pub mod messages;
+mod post;
 
 use self::messages::*;
+pub use self::post::Post;
 
 const BACKFILL_CHUNK_SIZE: usize = 100;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Post {
-    post_id: PostId,
-    author: UserId,
-}
-
-impl Ord for Post {
-    fn cmp(&self, other: &Post) -> Ordering {
-        self.post_id.cmp(&other.post_id)
-    }
-}
-
-impl PartialOrd for Post {
-    fn partial_cmp(&self, other: &Post) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
 
 pub struct Posts {
     posts_id: PostsId,
     current_id: u64,
     posts: BTreeMap<PostId, Post>,
-    redundancy: Vec<SyncAddress<Posts>>,
 }
 
 impl Posts {
@@ -42,13 +25,7 @@ impl Posts {
             posts_id: posts_id,
             current_id: 0,
             posts: BTreeMap::new(),
-            redundancy: Vec::new(),
         }
-    }
-
-    pub fn add_peer(mut self, peer: SyncAddress<Posts>) -> Self {
-        self.redundancy.push(peer);
-        self
     }
 
     fn generate_post_id(&mut self) -> PostId {
@@ -93,133 +70,103 @@ impl Posts {
     }
 }
 
-impl Actor for Posts {
-    type Context = Context<Self>;
+impl PeeredInner for Posts {
+    type Backfill = (usize, Vec<Post>);
+    type Request = usize;
 
-    fn started(&mut self, ctx: &mut Context<Self>) {
-        if !self.redundancy.is_empty() {
-            self.redundancy[0].send(RequestPeers(ctx.address()));
-            self.redundancy[0].send(RequestBackfill(ctx.address(), 0));
-        }
-    }
-}
-
-impl Handler<NewPost> for Posts {
-    type Result = Result<PostId, ()>;
-
-    fn handle(&mut self, msg: NewPost, _: &mut Context<Self>) -> Self::Result {
-        let (post_id, post) = self.new_post(msg.0);
-
-        for addr in &self.redundancy {
-            addr.send(AnnounceNewPost(post_id, post.clone()));
-        }
-
-        Ok(post_id)
-    }
-}
-
-impl Handler<DeletePost> for Posts {
-    type Result = ();
-
-    fn handle(&mut self, msg: DeletePost, _: &mut Context<Self>) -> Self::Result {
-        self.delete_post(msg.0)
-    }
-}
-
-impl Handler<GetPostsByIds> for Posts {
-    type Result = Result<Vec<Post>, ()>;
-
-    fn handle(&mut self, msg: GetPostsByIds, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.get_posts(msg.0))
-    }
-}
-
-impl Handler<AnnounceNewPost> for Posts {
-    type Result = ();
-
-    fn handle(&mut self, msg: AnnounceNewPost, _: &mut Context<Self>) -> Self::Result {
-        self.posts.insert(msg.0, msg.1);
-    }
-}
-
-impl Handler<AnnounceDeletePost> for Posts {
-    type Result = ();
-
-    fn handle(&mut self, msg: AnnounceDeletePost, _: &mut Context<Self>) -> Self::Result {
-        self.delete_post(msg.0);
-    }
-}
-
-impl Handler<AnnounceRedundancy> for Posts {
-    type Result = ();
-
-    fn handle(&mut self, msg: AnnounceRedundancy, _: &mut Context<Self>) -> Self::Result {
-        self.redundancy.push(msg.0);
-    }
-}
-
-impl Handler<RequestPeers> for Posts {
-    type Result = ();
-
-    fn handle(&mut self, msg: RequestPeers, _: &mut Context<Self>) -> Self::Result {
-        msg.0.send(ReplyPeers(self.redundancy.clone()));
-
-        self.redundancy.push(msg.0);
-    }
-}
-
-impl Handler<ReplyPeers> for Posts {
-    type Result = ();
-
-    fn handle(&mut self, msg: ReplyPeers, ctx: &mut Context<Self>) -> Self::Result {
-        for peer in &msg.0 {
-            peer.send(AnnounceRedundancy(ctx.address()));
-        }
-        self.redundancy.extend(msg.0);
-    }
-}
-
-impl Handler<RequestBackfill> for Posts {
-    type Result = ();
-
-    fn handle(&mut self, msg: RequestBackfill, _: &mut Context<Self>) -> Self::Result {
-        let backfill = self.posts
+    fn backfill(&self, req: Self::Request) -> Self::Backfill {
+        let p = self.posts
             .iter()
-            .skip(msg.1)
+            .skip(req)
             .take(BACKFILL_CHUNK_SIZE)
             .map(|(a, b)| (a.clone(), b.clone()))
             .collect();
 
-        msg.0.send(ReplyBackfill(msg.1, backfill));
+        (req, p)
     }
-}
 
-impl Handler<ReplyBackfill> for Posts {
-    type Result = ();
+    fn backfill_init(&self) -> Self::Request {
+        0
+    }
 
-    fn handle(&mut self, msg: ReplyBackfill, ctx: &mut Context<Self>) -> Self::Result {
-        if msg.1.len() == BACKFILL_CHUNK_SIZE {
-            self.redundancy
-                .get(0)
-                .map(|node| node.send(RequestBackfill(ctx.address(), msg.0 + BACKFILL_CHUNK_SIZE)));
+    fn handle_backfill(&mut self, backfill: Self::Backfill) -> Option<Self::Request> {
+        let mut ret = None;
+
+        if backfill.1.len() == BACKFILL_CHUNK_SIZE {
+            ret = Some(backfill.0 + BACKFILL_CHUNK_SIZE);
         }
 
-        self.posts.extend(msg.1);
+        self.posts.extend(backfill.1);
+
+        ret
     }
 }
 
-impl Handler<PeerSize> for Posts {
-    type Result = Result<usize, ()>;
+impl HandleMessage for Posts {
+    type Message = NewPost;
+    type Broadcast = NewPostFull;
+    type Item = PostId;
+    type Error = ();
 
-    fn handle(&mut self, _: PeerSize, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.redundancy.len())
+    fn handle_message(&mut self, msg: Self::Message) -> Self::Result {
+        let (post_id, post) = self.new_post(msg.0);
+
+        (Ok(post_id), Some(NewPostFull(post_id, post)))
     }
 }
 
-impl Handler<PostSize> for Posts {
-    type Result = Result<usize, ()>;
+impl HandleMessage for Posts {
+    type Message = DeletePost;
+    type Broadcast = DeletePost;
+    type Item = ();
+    type Error = ();
 
-    fn handle(&mut self, _: PostSize, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.posts.len())
+    fn handle_message(&mut self, msg: Self::Message) -> Self::Result {
+        self.delete_post(msg.0);
+
+        (Ok(()), Some(msg))
+    }
+}
+
+impl HandleMessage for Posts {
+    type Message = GetPostsByIds;
+    type Broadcast = ();
+    type Item = Vec<Post>;
+    type Error = ();
+
+    fn handle_message(&mut self, msg: Self::Message) -> Self::Result {
+        (Ok(self.get_posts()), None)
+    }
+}
+
+impl HandleMessage for Posts {
+    type Message = PostSize;
+    type Broadcast = ();
+    type Item = usize;
+    type Error = ();
+
+    fn handle_message(&mut self, _: Self::Message) -> Self::Result {
+        (Ok(self.posts.len()), None)
+    }
+}
+
+impl HandleAnnounce for Posts {
+    type Broadcast = NewPostFull;
+    type Item = ();
+    type Error = ();
+
+    fn handle_announce(&mut self, msg: Self::Broadcast) -> Self::Result {
+        self.posts.insert(msg.0, msg.1);
+        Ok(())
+    }
+}
+
+impl HandleAnnounce for Posts {
+    type Broadcast = DeletePost;
+    type Item = ();
+    type Error = ();
+
+    fn handle_announce(&mut self, msg: Self::Broadcast) -> Self::Result {
+        self.delete_post(msg.0);
     }
 }

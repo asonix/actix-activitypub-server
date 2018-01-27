@@ -7,53 +7,21 @@ use super::posts::Posts;
 use super::user::User;
 use super::user::inbox::Inbox;
 use super::user::outbox::Outbox;
+use super::peered::{PeeredInner, HandleMessage, HandleAnnounce};
 
 pub mod messages;
+mod user_address;
 
 use self::messages::*;
+pub use self::user_address::UserAddress;
 
 const BACKFILL_CHUNK_SIZE: usize = 100;
-
-#[derive(Clone)]
-pub struct UserAddress {
-    user: SyncAddress<User>,
-    inbox: SyncAddress<Inbox>,
-    outbox: SyncAddress<Outbox>,
-}
-
-impl UserAddress {
-    pub fn new(user_id: UserId, posts: SyncAddress<Posts>, users: SyncAddress<Users>) -> Self {
-        let (user_local, user): (Address<_>, SyncAddress<_>) = User::new(user_id).start();
-
-        let inbox = Inbox::new(user_local.clone()).start();
-        let outbox = Outbox::new(user_id, user_local, posts, users).start();
-
-        UserAddress {
-            user,
-            inbox,
-            outbox,
-        }
-    }
-
-    pub fn user(&self) -> &SyncAddress<User> {
-        &self.user
-    }
-
-    pub fn inbox(&self) -> &SyncAddress<Inbox> {
-        &self.inbox
-    }
-
-    pub fn outbox(&self) -> &SyncAddress<Outbox> {
-        &self.outbox
-    }
-}
 
 pub struct Users {
     users_id: UsersId,
     current_id: u64,
     users: BTreeMap<UserId, UserAddress>,
     posts: SyncAddress<Posts>,
-    redundancy: Vec<SyncAddress<Users>>,
 }
 
 impl Users {
@@ -63,13 +31,7 @@ impl Users {
             current_id: 0,
             users: BTreeMap::new(),
             posts: posts,
-            redundancy: Vec::new(),
         }
-    }
-
-    pub fn add_peer(mut self, peer: SyncAddress<Users>) -> Self {
-        self.redundancy.push(peer);
-        self
     }
 
     fn gen_next_id(&mut self) -> UserId {
@@ -116,134 +78,115 @@ impl Users {
     }
 }
 
-impl Actor for Users {
-    type Context = Context<Self>;
+impl PeeredInner for Users {
+    type Backfill = (usize, Vec<UserAddress>);
+    type Request = usize;
 
-    fn started(&mut self, ctx: &mut Context<Self>) {
-        if !self.redundancy.is_empty() {
-            self.redundancy[0].send(RequestPeers(ctx.address()));
-            self.redundancy[0].send(RequestBackfill(ctx.address(), 0));
-        }
-    }
-}
-
-impl Handler<Lookup> for Users {
-    type Result = Result<UserAddress, ()>;
-
-    fn handle(&mut self, msg: Lookup, _: &mut Context<Self>) -> Self::Result {
-        self.get_user(msg.0).ok_or(())
-    }
-}
-
-impl Handler<LookupMany> for Users {
-    type Result = Result<(Vec<UserAddress>, Vec<UserId>), ()>;
-
-    fn handle(&mut self, msg: LookupMany, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.get_users(msg.0))
-    }
-}
-
-impl Handler<NewUser> for Users {
-    type Result = Result<UserId, ()>;
-
-    fn handle(&mut self, _: NewUser, ctx: &mut Context<Self>) -> Self::Result {
-        let (user_id, user_address) = self.new_user(ctx.address());
-
-        for addr in &self.redundancy {
-            addr.send(AnnounceNewUser(user_id, user_address.clone()));
-        }
-
-        Ok(user_id)
-    }
-}
-
-impl Handler<AnnounceNewUser> for Users {
-    type Result = ();
-
-    fn handle(&mut self, msg: AnnounceNewUser, _: &mut Context<Self>) -> Self::Result {
-        self.add_user(msg.0, msg.1);
-    }
-}
-
-impl Handler<AnnounceDeleteUser> for Users {
-    type Result = ();
-
-    fn handle(&mut self, msg: AnnounceDeleteUser, _: &mut Context<Self>) -> Self::Result {
-        self.delete_user(msg.0);
-    }
-}
-
-impl Handler<AnnounceRedundancy> for Users {
-    type Result = ();
-
-    fn handle(&mut self, msg: AnnounceRedundancy, _: &mut Context<Self>) -> Self::Result {
-        self.redundancy.push(msg.0);
-    }
-}
-
-impl Handler<RequestPeers> for Users {
-    type Result = ();
-
-    fn handle(&mut self, msg: RequestPeers, _: &mut Context<Self>) -> Self::Result {
-        msg.0.send(ReplyPeers(self.redundancy.clone()));
-
-        self.redundancy.push(msg.0);
-    }
-}
-
-impl Handler<ReplyPeers> for Users {
-    type Result = ();
-
-    fn handle(&mut self, msg: ReplyPeers, ctx: &mut Context<Self>) -> Self::Result {
-        for peer in &msg.0 {
-            peer.send(AnnounceRedundancy(ctx.address()));
-        }
-
-        self.redundancy.extend(msg.0);
-    }
-}
-
-impl Handler<RequestBackfill> for Users {
-    type Result = ();
-
-    fn handle(&mut self, msg: RequestBackfill, _: &mut Context<Self>) -> Self::Result {
-        let backfill = self.users
+    fn backfill(&self, req: Self::Request) -> Self::Backfill {
+        let u = self.users
             .iter()
-            .skip(msg.1)
+            .skip(req)
             .take(BACKFILL_CHUNK_SIZE)
             .map(|(a, b)| (a.clone(), b.clone()))
             .collect();
 
-        msg.0.send(ReplyBackfill(msg.1, backfill));
+        (req, u)
     }
-}
 
-impl Handler<ReplyBackfill> for Users {
-    type Result = ();
+    fn backfill_init(&self) -> Self::Request {
+        0
+    }
 
-    fn handle(&mut self, msg: ReplyBackfill, ctx: &mut Context<Self>) -> Self::Result {
-        if msg.1.len() == BACKFILL_CHUNK_SIZE {
-            self.redundancy
-                .get(0)
-                .map(|node| node.send(RequestBackfill(ctx.address(), msg.0 + BACKFILL_CHUNK_SIZE)));
+    fn handle_backfill(&mut self, backfill: Self::Backfill) -> Option<Self::Request> {
+        let mut ret = None;
+
+        if backfill.1.len() == BACKFILL_CHUNK_SIZE {
+            ret = Some(backfill.0 + BACKFILL_CHUNK_SIZE);
         }
 
-        self.users.extend(msg.1);
+        self.users.extend(backfill.1);
+
+        ret
     }
 }
 
-impl Handler<PeerSize> for Users {
-    type Result = Result<usize, ()>;
+impl HandleMessage for Users {
+    type Message = Lookup;
+    type Broadcast = ();
+    type Item = UserAddress;
+    type Error = ();
 
-    fn handle(&mut self, _: PeerSize, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.redundancy.len())
+    fn handle_message(&mut self, msg: Self::Message) -> (Result<UserAddress, ()>, Option<()>) {
+        (self.get_user(msg.0).ok_or(()), None)
     }
 }
 
-impl Handler<UserSize> for Users {
-    type Result = Result<usize, ()>;
+impl HandleMessage for Users {
+    type Message = LookupMany;
+    type Broadcast = ();
+    type Item = (Vec<UserAddress>, Vec<UserId>);
+    type Error = ();
 
-    fn handle(&mut self, _: UserSize, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.users.len())
+    fn handle_message(&mut self, msg: Self::Message) -> Self::Result {
+        (Ok(self.get_users(msg.0)), None)
+    }
+}
+
+impl HandleMessage for Users {
+    type Message = NewUser;
+    type Broadcast = NewUserFull;
+    type Item = UserId;
+    type Error = ();
+
+    fn handle_message(&mut self, msg: Self::Message) -> Self::Result {
+        let (user_id, user_address) = self.new_user(msg.0);
+
+        (Ok(user_id), Some(NewUserFull(user_id, user_address)))
+    }
+}
+
+impl HandleMessage for Users {
+    type Message = DeleteUser;
+    type Broadcast = DeleteUser;
+    type Item = ();
+    type Error = ();
+
+    fn handle_message(&mut self, msg: Self::Message) -> Self::Result {
+        self.delete_user(msg.0);
+
+        (Ok(()), Some(msg))
+    }
+}
+
+impl HandleMessage for Users {
+    type Message = UserSize;
+    type Broadcast = ();
+    type Item = usize;
+    type Error = ();
+
+    fn handle_message(&mut self, _: Self::Message) -> Self::Result {
+        (Ok(self.users.len()), None)
+    }
+}
+
+impl HandleAnnounce for Users {
+    type Broadcast = NewUserFull;
+    type Item = ();
+    type Error = ();
+
+    fn handle_announce(&mut self, msg: Self::Broadcast) -> Self::Result {
+        self.add_user(msg.0, msg.1);
+        Ok(())
+    }
+}
+
+impl HandleAnnounce for Users {
+    type Broadcast = DeleteUser;
+    type Item = ();
+    type Error = ();
+
+    fn handle_announce(&mut self, msg: Self::Broadcast) -> Self::Result {
+        self.delete_user(msg.0);
+        Ok(())
     }
 }
