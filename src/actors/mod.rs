@@ -128,7 +128,7 @@ mod tests {
                 let uid_vec = vec![uid1, uid2];
 
                 users_1
-                    .call_fut(Message::new(LookupMany(uid_vec.clone())))
+                    .call_fut(Message::new(LookupMany(uid_vec.iter().cloned().collect())))
                     .map_err(|_| ())
                     .and_then(|res| res)
                     .map(|(user_addrs, _)| (uid_vec, user_addrs))
