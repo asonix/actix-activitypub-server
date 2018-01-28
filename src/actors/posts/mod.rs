@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{Id, PostId, PostsId, UserId};
-use super::peered::{HandleAnnounce, HandleMessage, PeeredInner};
+use super::peered::{HandleAnnounce, HandleMessage, HandleMessageType, PeeredInner};
 
 pub mod messages;
 mod post;
@@ -81,7 +81,7 @@ impl PeeredInner for Posts {
             .iter()
             .skip(req)
             .take(BACKFILL_CHUNK_SIZE)
-            .map(|(a, b)| (a.clone(), b.clone()))
+            .map(|(a, b)| (*a, b.clone()))
             .collect();
 
         (req, p)
@@ -92,11 +92,11 @@ impl PeeredInner for Posts {
     }
 
     fn handle_backfill(&mut self, backfill: Self::Backfill) -> Option<Self::Request> {
-        let mut ret = None;
-
-        if backfill.1.len() == BACKFILL_CHUNK_SIZE {
-            ret = Some(backfill.0 + BACKFILL_CHUNK_SIZE);
-        }
+        let ret = if backfill.1.len() == BACKFILL_CHUNK_SIZE {
+            Some(backfill.0 + BACKFILL_CHUNK_SIZE)
+        } else {
+            None
+        };
 
         self.posts.extend(backfill.1);
 
@@ -109,7 +109,7 @@ impl HandleMessage<NewPost> for Posts {
     type Item = PostId;
     type Error = ();
 
-    fn handle_message(&mut self, msg: NewPost) -> (Result<PostId, ()>, Option<NewPostFull>) {
+    fn handle_message(&mut self, msg: NewPost) -> HandleMessageType<PostId, (), NewPostFull> {
         let (post_id, post) = self.new_post(msg.0, msg.1);
 
         (Ok(post_id), Some(NewPostFull(post_id, post)))
@@ -121,7 +121,7 @@ impl HandleMessage<DeletePost> for Posts {
     type Item = ();
     type Error = ();
 
-    fn handle_message(&mut self, msg: DeletePost) -> (Result<(), ()>, Option<DeletePost>) {
+    fn handle_message(&mut self, msg: DeletePost) -> HandleMessageType<(), (), DeletePost> {
         self.delete_post(msg.0);
 
         (Ok(()), Some(msg))
@@ -133,7 +133,7 @@ impl HandleMessage<GetPostsByIds> for Posts {
     type Item = Vec<Post>;
     type Error = ();
 
-    fn handle_message(&mut self, msg: GetPostsByIds) -> (Result<Vec<Post>, ()>, Option<()>) {
+    fn handle_message(&mut self, msg: GetPostsByIds) -> HandleMessageType<Self::Item, (), ()> {
         (Ok(self.get_posts(msg.0)), None)
     }
 }
@@ -143,7 +143,7 @@ impl HandleMessage<PostSize> for Posts {
     type Item = usize;
     type Error = ();
 
-    fn handle_message(&mut self, _: PostSize) -> (Result<usize, ()>, Option<()>) {
+    fn handle_message(&mut self, _: PostSize) -> HandleMessageType<usize, (), ()> {
         (Ok(self.posts.len()), None)
     }
 }

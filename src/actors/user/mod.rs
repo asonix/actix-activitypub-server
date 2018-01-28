@@ -78,7 +78,7 @@ impl User {
         post_ids
     }
 
-    fn new_post(&mut self, post_id: PostId, user_id: UserId, mentions: BTreeSet<UserId>) {
+    fn new_post(&mut self, post_id: PostId, user_id: UserId, mentions: &BTreeSet<UserId>) {
         debug!(
             "user {:?} is storing new post {:?} from user {:?}",
             self.user_id, post_id, user_id
@@ -153,7 +153,7 @@ impl Handler<NewPostIn> for User {
     type Result = ();
 
     fn handle(&mut self, msg: NewPostIn, _: &mut Context<Self>) -> Self::Result {
-        self.new_post(msg.0, msg.1, msg.2);
+        self.new_post(msg.0, msg.1, &msg.2);
     }
 }
 

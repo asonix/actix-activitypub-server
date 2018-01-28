@@ -21,6 +21,8 @@ pub trait PeeredInner {
     fn handle_backfill(&mut self, backfill: Self::Backfill) -> Option<Self::Request>;
 }
 
+pub type HandleMessageType<I, E, B> = (Result<I, E>, Option<B>);
+
 pub trait HandleMessage<M> {
     type Broadcast: Clone + Send + 'static;
     type Item: Send;
@@ -30,7 +32,7 @@ pub trait HandleMessage<M> {
     fn handle_message(
         &mut self,
         message: M,
-    ) -> (Result<Self::Item, Self::Error>, Option<Self::Broadcast>);
+    ) -> HandleMessageType<Self::Item, Self::Error, Self::Broadcast>;
 }
 
 pub trait HandleAnnounce<B> {
