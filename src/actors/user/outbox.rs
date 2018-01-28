@@ -53,7 +53,7 @@ impl Handler<NewPostOut> for Outbox {
         let fut = self.posts
             .call_fut(Message::new(NewPost(user_id, mentions.clone())))
             .join(self.user.call_fut(GetFollowers))
-            .map_err(|_| ())
+            .map_err(|e| error!("Error: {}", e))
             .and_then(move |(post_result, followers_result)| {
                 let res = post_result.and_then(|pid| followers_result.map(|f| (pid, f)));
 
