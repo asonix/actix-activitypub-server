@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use actix::{Actor, Context, Handler};
 
+use actors::posts::messages::DeletePost;
 use super::{PostId, User, UserId};
 use super::messages::*;
 
@@ -14,6 +15,14 @@ impl Handler<NewPostIn> for User {
 
     fn handle(&mut self, msg: NewPostIn, _: &mut Context<Self>) -> Self::Result {
         self.new_post(msg.0, msg.1, &msg.2);
+    }
+}
+
+impl Handler<DeletePost> for User {
+    type Result = ();
+
+    fn handle(&mut self, msg: DeletePost, _: &mut Context<Self>) -> Self::Result {
+        self.delete_post(msg.0);
     }
 }
 
@@ -50,18 +59,18 @@ impl Handler<FollowRequest> for User {
 }
 
 impl Handler<AcceptFollowRequest> for User {
-    type Result = Result<UserId, ()>;
+    type Result = ();
 
     fn handle(&mut self, msg: AcceptFollowRequest, _: &mut Context<Self>) -> Self::Result {
-        self.accept_follow_request(msg.0).ok_or(())
+        self.accept_follow_request(msg.0);
     }
 }
 
 impl Handler<DenyFollowRequest> for User {
-    type Result = Result<UserId, ()>;
+    type Result = ();
 
     fn handle(&mut self, msg: DenyFollowRequest, _: &mut Context<Self>) -> Self::Result {
-        self.deny_follow_request(msg.0).ok_or(())
+        self.deny_follow_request(msg.0);
     }
 }
 
@@ -86,5 +95,29 @@ impl Handler<FollowRequestDenied> for User {
 
     fn handle(&mut self, msg: FollowRequestDenied, _: &mut Context<Self>) -> Self::Result {
         self.follow_request_denied(msg.0);
+    }
+}
+
+impl Handler<BlockUser> for User {
+    type Result = ();
+
+    fn handle(&mut self, msg: BlockUser, _: &mut Context<Self>) -> Self::Result {
+        self.block_user(msg.0);
+    }
+}
+
+impl Handler<Blocked> for User {
+    type Result = ();
+
+    fn handle(&mut self, msg: Blocked, _: &mut Context<Self>) -> Self::Result {
+        self.blocked_by(msg.0);
+    }
+}
+
+impl Handler<GetBlocklist> for User {
+    type Result = Result<BTreeSet<UserId>, ()>;
+
+    fn handle(&mut self, _: GetBlocklist, _: &mut Context<Self>) -> Self::Result {
+        Ok(self.blocklist())
     }
 }

@@ -87,8 +87,8 @@ mod tests {
     use super::peered::messages::{Message, PeerSize};
     use super::posts::Posts;
     use super::posts::messages::PostSize;
-    use super::user::messages::{AcceptFollowRequest, DenyFollowRequest, GetFollowers, GetPostIds,
-                                GetUserPostIds, NewPostOut, RequestFollow};
+    use super::user::messages::{AcceptFollowRequest, BlockUser, DenyFollowRequest, GetFollowers,
+                                GetPostIds, GetUserPostIds, NewPostOut, RequestFollow};
     use super::users::{UserAddress, Users};
     use super::users::messages::{Lookup, LookupMany, NewUser, UserSize};
 
@@ -320,6 +320,78 @@ mod tests {
     #[test]
     fn test_new_users() {
         with_users(|_, _| future::result(Ok(())))
+    }
+
+    #[test]
+    fn test_blocked_user_doesnt_receive_post() {
+        with_users(|ids_vec, addrs_vec| {
+            let u0_a = addrs_vec[0].clone();
+            let u0_b = addrs_vec[0].clone();
+            let uid0 = ids_vec[0];
+            let u1_a = addrs_vec[1].clone();
+            let u1_b = u1_a.clone();
+            let u1_c = u1_a.clone();
+            let u1_d = u1_a.clone();
+            // User 0 requests to follow User 1
+            u0_a.outbox()
+                .call_fut(RequestFollow(ids_vec[1]))
+                .map_err(|_| ())
+                .map(|_| Timer::default().sleep(Duration::from_millis(100)))
+                .and_then(move |_| {
+                    // user 1 accepts user 0's follow request
+                    u1_a.outbox()
+                        .call_fut(AcceptFollowRequest(uid0))
+                        .map_err(|_| ())
+                })
+                .map(|_| Timer::default().sleep(Duration::from_millis(100)))
+                .and_then(|_| {
+                    u1_b.outbox()
+                        .call_fut(NewPostOut(BTreeSet::new()))
+                        .map_err(|_| ())
+                })
+                .map(|_| Timer::default().sleep(Duration::from_millis(100)))
+                .and_then(|_| {
+                    // user 0 should have a post in inbox
+                    u0_b.user()
+                        .call_fut(GetPostIds)
+                        .map_err(|_| ())
+                        .and_then(|res| res)
+                        .map(|post_ids| assert!(!post_ids.is_empty()))
+                })
+                .map(|_| Timer::default().sleep(Duration::from_millis(100)))
+                .and_then(move |_| {
+                    // user 1 blocks user 0
+                    u1_c.outbox()
+                        .call_fut(BlockUser(uid0))
+                        .map_err(|_| ())
+                })
+                .map(|_| Timer::default().sleep(Duration::from_millis(100)))
+                .and_then(move |_| {
+                    // user 1 makes post
+                    u1_d.outbox()
+                        .call_fut(NewPostOut(BTreeSet::new()))
+                        .map_err(|_| ())
+                })
+                .and_then(move |_| {
+                    // user 1 should own two posts
+                    let fut = addrs_vec[1]
+                        .user()
+                        .call_fut(GetUserPostIds)
+                        .map_err(|_| ())
+                        .and_then(|res| res)
+                        .map(|post_ids| assert_eq!(post_ids.len(), 2));
+
+                    // user 0 should not have a post in inbox
+                    let fut2 = addrs_vec[0]
+                        .user()
+                        .call_fut(GetPostIds)
+                        .map_err(|_| ())
+                        .and_then(|res| res)
+                        .map(|post_ids| assert!(post_ids.is_empty()));
+
+                    fut.and_then(|_| fut2)
+                })
+        })
     }
 
     #[test]

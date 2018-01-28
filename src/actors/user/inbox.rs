@@ -48,3 +48,11 @@ impl Handler<FollowRequestDenied> for Inbox {
         self.user.send(msg);
     }
 }
+
+impl Handler<Blocked> for Inbox {
+    type Result = ();
+
+    fn handle(&mut self, msg: Blocked, _: &mut Context<Self>) -> Self::Result {
+        self.user.send(msg);
+    }
+}

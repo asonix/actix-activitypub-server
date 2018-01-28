@@ -84,12 +84,17 @@ impl User {
         if user_id == self.user_id {
             self.my_posts.insert(post_id);
         } else if self.following.contains(&user_id)
-            || (mentions.contains(&self.user_id) && !self.blocklist.contains(&user_id))
+            || (mentions.contains(&self.user_id) && !self.blocklist.contains(&user_id) && self.blocklist.is_disjoint(mentions))
         {
             self.posts.insert(post_id);
         } else {
             error!("Should not have recieved post from user {:?}", user_id);
         }
+    }
+
+    fn delete_post(&mut self, post_id: PostId) {
+        self.posts.remove(&post_id);
+        self.my_posts.remove(&post_id);
     }
 
     fn followers(&self) -> BTreeSet<UserId> {
@@ -139,5 +144,18 @@ impl User {
 
     fn follow_request_denied(&mut self, user_id: UserId) {
         self.pending_follows.remove(&user_id);
+    }
+
+    fn block_user(&mut self, user_id: UserId) {
+        self.blocklist.insert(user_id);
+    }
+
+    fn blocked_by(&mut self, user_id: UserId) {
+        self.following.remove(&user_id);
+        self.pending_follows.remove(&user_id);
+    }
+
+    fn blocklist(&mut self) -> BTreeSet<UserId> {
+        self.blocklist.clone()
     }
 }

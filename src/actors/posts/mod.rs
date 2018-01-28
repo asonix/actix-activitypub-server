@@ -55,8 +55,8 @@ impl Posts {
         self.posts.remove(&post_id);
     }
 
-    fn get_posts(&mut self, post_ids: Vec<PostId>) -> Vec<Post> {
-        let (posts, _) = post_ids.into_iter().fold(
+    fn get_posts(&mut self, post_ids: Vec<PostId>) -> (Vec<Post>, Vec<PostId>) {
+        post_ids.into_iter().fold(
             (Vec::new(), Vec::new()),
             |(mut posts, mut missing), post_id| {
                 match self.posts.get(&post_id).cloned() {
@@ -66,9 +66,7 @@ impl Posts {
 
                 (posts, missing)
             },
-        );
-
-        posts
+        )
     }
 }
 

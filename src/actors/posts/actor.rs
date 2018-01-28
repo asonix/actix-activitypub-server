@@ -29,7 +29,7 @@ impl HandleMessage<DeletePost> for Posts {
 
 impl HandleMessage<GetPostsByIds> for Posts {
     type Broadcast = ();
-    type Item = Vec<Post>;
+    type Item = (Vec<Post>, Vec<PostId>);
     type Error = ();
 
     fn handle_message(&mut self, msg: GetPostsByIds) -> HandleMessageType<Self::Item, (), ()> {

@@ -66,7 +66,7 @@ impl ResponseType for FollowRequest {
 pub struct AcceptFollowRequest(pub UserId);
 
 impl ResponseType for AcceptFollowRequest {
-    type Item = UserId;
+    type Item = ();
     type Error = ();
 }
 
@@ -74,7 +74,7 @@ impl ResponseType for AcceptFollowRequest {
 pub struct DenyFollowRequest(pub UserId);
 
 impl ResponseType for DenyFollowRequest {
-    type Item = UserId;
+    type Item = ();
     type Error = ();
 }
 
@@ -98,6 +98,22 @@ impl ResponseType for FollowRequestAccepted {
 pub struct FollowRequestDenied(pub UserId);
 
 impl ResponseType for FollowRequestDenied {
+    type Item = ();
+    type Error = ();
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BlockUser(pub UserId);
+
+impl ResponseType for BlockUser {
+    type Item = ();
+    type Error = ();
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Blocked(pub UserId);
+
+impl ResponseType for Blocked {
     type Item = ();
     type Error = ();
 }

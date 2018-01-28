@@ -6,7 +6,7 @@ use actors::dispatch::messages::{DispatchAnnounce, DispatchMessage};
 use actors::peered::Peered;
 use actors::peered::messages::Message;
 use actors::posts::Posts;
-use actors::posts::messages::NewPost;
+use actors::posts::messages::{NewPost, DeletePost};
 use actors::users::Users;
 use super::messages::*;
 use super::{User, UserId};
@@ -74,6 +74,15 @@ impl Handler<NewPostOut> for Outbox {
     }
 }
 
+impl Handler<DeletePost> for Outbox {
+    type Result = ();
+
+    fn handle(&mut self, msg: DeletePost, &mut Context<Self>) -> Self::Result {
+        self.user.send(msg);
+        self.posts.send(msg);
+    }
+}
+
 impl Handler<RequestFollow> for Outbox {
     type Result = ();
 
@@ -90,27 +99,37 @@ impl Handler<RequestFollow> for Outbox {
 }
 
 impl Handler<AcceptFollowRequest> for Outbox {
-    type Result = Result<UserId, ()>;
+    type Result = ();
 
     fn handle(&mut self, msg: AcceptFollowRequest, _: &mut Context<Self>) -> Self::Result {
         self.user.send(msg);
 
         self.dispatch
             .send(DispatchMessage(FollowRequestAccepted(self.user_id), msg.0));
-
-        Ok(self.user_id)
     }
 }
 
 impl Handler<DenyFollowRequest> for Outbox {
-    type Result = Result<UserId, ()>;
+    type Result = ();
 
     fn handle(&mut self, msg: DenyFollowRequest, _: &mut Context<Self>) -> Self::Result {
         self.user.send(msg);
 
         self.dispatch
             .send(DispatchMessage(FollowRequestDenied(self.user_id), msg.0));
+    }
+}
 
-        Ok(self.user_id)
+impl Handler<BlockUser> for Outbox {
+    type Result = ();
+
+    fn handle(&mut self, msg: BlockUser, _: &mut Context<Self>) -> Self::Result {
+        self.user.send(msg);
+
+        self.dispatch
+            .send(DispatchMessage(Blocked(self.user_id), msg.0));
+
+        let dispatch = self.dispatch;
+        // TODO: finish deleting posts for blocked users.
     }
 }
