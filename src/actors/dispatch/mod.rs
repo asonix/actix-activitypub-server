@@ -1,12 +1,10 @@
-use std::collections::BTreeSet;
-
-use actix::{Actor, Arbiter, Context, Handler, SyncAddress};
+use actix::{Actor, Arbiter, Context, Handler, ResponseType, SyncAddress};
 use futures::Future;
 
 use super::peered::Peered;
 use super::peered::messages::Message;
-use super::{PostId, UserId};
-use super::user::messages::{FollowRequest, FollowRequestAccepted, FollowRequestDenied, NewPostIn};
+use super::user::inbox::Inbox;
+use super::UserId;
 use super::users::Users;
 use super::users::messages::{Lookup, LookupMany};
 
@@ -28,87 +26,47 @@ impl Actor for Dispatch {
     type Context = Context<Self>;
 }
 
-impl Handler<DispatchPost> for Dispatch {
+impl<T> Handler<DispatchMessage<T>> for Dispatch
+where
+    T: ResponseType<Item = (), Error = ()> + Send + 'static,
+    Inbox: Handler<T>,
+{
     type Result = ();
 
-    fn handle(&mut self, msg: DispatchPost, _: &mut Context<Self>) -> Self::Result {
-        let DispatchPost(post_id, user_id, mentions, recipients) = msg;
-
-        let mut ids_set = BTreeSet::new();
-        ids_set.extend(recipients);
-        ids_set.extend(mentions.clone());
+    fn handle(&mut self, msg: DispatchMessage<T>, _: &mut Context<Self>) -> Self::Result {
+        let DispatchMessage(message, target) = msg;
 
         let fut = self.users
-            .call_fut(Message::new(LookupMany(ids_set.into_iter().collect())))
-            .map_err(|e| error!("Error: {}", e))
-            .and_then(|result| result)
-            .and_then(move |(addrs, _)| {
-                for addr in addrs {
-                    addr.inbox()
-                        .send(NewPostIn(post_id, user_id, mentions.clone()));
-                }
-
-                Ok(())
-            });
-
-        Arbiter::handle().spawn(fut);
-    }
-}
-
-impl Handler<DispatchFollowRequest> for Dispatch {
-    type Result = ();
-
-    fn handle(&mut self, msg: DispatchFollowRequest, _: &mut Context<Self>) -> Self::Result {
-        let DispatchFollowRequest {
-            requesting_user,
-            target_user,
-        } = msg;
-
-        let fut = self.users
-            .call_fut(Message::new(Lookup(target_user)))
+            .call_fut(Message::new(Lookup(target)))
             .map_err(|e| error!("Error: {}", e))
             .and_then(|result| result)
             .map(move |addr| {
-                addr.inbox().send(FollowRequest(requesting_user));
+                addr.inbox().send(message);
             });
 
         Arbiter::handle().spawn(fut);
     }
 }
 
-impl Handler<DispatchAcceptFollowRequest> for Dispatch {
+impl<T> Handler<DispatchAnnounce<T>> for Dispatch
+where
+    T: ResponseType<Item = (), Error = ()> + Clone + Send + 'static,
+    Inbox: Handler<T>,
+{
     type Result = ();
 
-    fn handle(&mut self, msg: DispatchAcceptFollowRequest, _: &mut Context<Self>) -> Self::Result {
-        let DispatchAcceptFollowRequest {
-            accepting_user,
-            target_user,
-        } = msg;
+    fn handle(&mut self, msg: DispatchAnnounce<T>, _: &mut Context<Self>) -> Self::Result {
+        let DispatchAnnounce(message, recipients) = msg;
 
         let fut = self.users
-            .call_fut(Message::new(Lookup(target_user)))
+            .call_fut(Message::new(LookupMany(recipients)))
             .map_err(|e| error!("Error: {}", e))
             .and_then(|result| result)
-            .map(move |addr| addr.inbox().send(FollowRequestAccepted(accepting_user)));
-
-        Arbiter::handle().spawn(fut);
-    }
-}
-
-impl Handler<DispatchDenyFollowRequest> for Dispatch {
-    type Result = ();
-
-    fn handle(&mut self, msg: DispatchDenyFollowRequest, _: &mut Context<Self>) -> Self::Result {
-        let DispatchDenyFollowRequest {
-            denying_user,
-            target_user,
-        } = msg;
-
-        let fut = self.users
-            .call_fut(Message::new(Lookup(target_user)))
-            .map_err(|e| error!("Error: {}", e))
-            .and_then(|result| result)
-            .map(move |addr| addr.inbox().send(FollowRequestDenied(denying_user)));
+            .map(move |(addrs, _missing_ids)| {
+                for addr in addrs {
+                    addr.inbox().send(message.clone());
+                }
+            });
 
         Arbiter::handle().spawn(fut);
     }

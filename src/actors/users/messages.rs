@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use actix::SyncAddress;
 
 use super::{UserAddress, UserId, Users};
@@ -7,7 +9,7 @@ use actors::peered::Peered;
 pub struct Lookup(pub UserId);
 
 #[derive(Clone, Debug)]
-pub struct LookupMany(pub Vec<UserId>);
+pub struct LookupMany(pub BTreeSet<UserId>);
 
 #[derive(Clone)]
 pub struct NewUser(pub SyncAddress<Peered<Users>>);

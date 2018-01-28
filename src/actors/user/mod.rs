@@ -35,17 +35,17 @@ impl User {
         }
     }
 
-    pub fn get_10_user_post_ids(&self) -> Vec<PostId> {
+    pub fn get_10_user_post_ids(&self) -> BTreeSet<PostId> {
         self.my_posts.iter().rev().take(10).cloned().collect()
     }
 
-    pub fn get_10_post_ids(&self) -> Vec<PostId> {
+    pub fn get_10_post_ids(&self) -> BTreeSet<PostId> {
         let p1 = self.posts.iter().rev().peekable();
         let p2 = self.my_posts.iter().rev().peekable();
 
         // Basically merge-sort
         let (_, _, post_ids) =
-            (0..10).fold((p1, p2, Vec::new()), |(mut p1, mut p2, mut vec), _| {
+            (0..10).fold((p1, p2, BTreeSet::new()), |(mut p1, mut p2, mut set), _| {
                 let use_p2 = {
                     let joined = p1.peek().and_then(|v1| p2.peek().map(|v2| (v1, v2)));
 
@@ -69,10 +69,10 @@ impl User {
                 };
 
                 if let Some(post_id) = post_id {
-                    vec.push(post_id)
+                    set.insert(post_id);
                 }
 
-                (p1, p2, vec)
+                (p1, p2, set)
             });
 
         post_ids
@@ -95,7 +95,7 @@ impl User {
         }
     }
 
-    fn followers(&self) -> Vec<UserId> {
+    fn followers(&self) -> BTreeSet<UserId> {
         debug!("followers requested for user {:?}", self.user_id);
         self.followers.iter().cloned().collect()
     }
@@ -158,7 +158,7 @@ impl Handler<NewPostIn> for User {
 }
 
 impl Handler<GetPostIds> for User {
-    type Result = Result<Vec<PostId>, ()>;
+    type Result = Result<BTreeSet<PostId>, ()>;
 
     fn handle(&mut self, _: GetPostIds, _: &mut Context<Self>) -> Self::Result {
         Ok(self.get_10_post_ids())
@@ -166,7 +166,7 @@ impl Handler<GetPostIds> for User {
 }
 
 impl Handler<GetUserPostIds> for User {
-    type Result = Result<Vec<PostId>, ()>;
+    type Result = Result<BTreeSet<PostId>, ()>;
 
     fn handle(&mut self, _: GetUserPostIds, _: &mut Context<Self>) -> Self::Result {
         Ok(self.get_10_user_post_ids())
@@ -174,7 +174,7 @@ impl Handler<GetUserPostIds> for User {
 }
 
 impl Handler<GetFollowers> for User {
-    type Result = Result<Vec<UserId>, ()>;
+    type Result = Result<BTreeSet<UserId>, ()>;
 
     fn handle(&mut self, _: GetFollowers, _: &mut Context<Self>) -> Self::Result {
         Ok(self.followers())

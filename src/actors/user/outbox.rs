@@ -2,8 +2,7 @@ use actix::{Actor, Address, Arbiter, Context, Handler, SyncAddress};
 use futures::Future;
 
 use actors::dispatch::Dispatch;
-use actors::dispatch::messages::{DispatchAcceptFollowRequest, DispatchDenyFollowRequest,
-                                 DispatchFollowRequest, DispatchPost};
+use actors::dispatch::messages::{DispatchAnnounce, DispatchMessage};
 use actors::peered::Peered;
 use actors::peered::messages::Message;
 use actors::posts::Posts;
@@ -62,7 +61,10 @@ impl Handler<NewPostOut> for Outbox {
                     debug!("Dispatching {:?} to recipients: {:?}", post_id, recipients);
                     user.send(NewPostIn(post_id, user_id, mentions.clone()));
 
-                    dispatch.send(DispatchPost(post_id, user_id, mentions, recipients));
+                    dispatch.send(DispatchAnnounce(
+                        NewPostIn(post_id, user_id, mentions),
+                        recipients,
+                    ));
                 }
 
                 Ok(())
@@ -83,7 +85,7 @@ impl Handler<RequestFollow> for Outbox {
         self.user.send(msg);
 
         self.dispatch
-            .send(DispatchFollowRequest::new(self.user_id, msg.0));
+            .send(DispatchMessage(FollowRequest(self.user_id), msg.0));
     }
 }
 
@@ -94,7 +96,7 @@ impl Handler<AcceptFollowRequest> for Outbox {
         self.user.send(msg);
 
         self.dispatch
-            .send(DispatchAcceptFollowRequest::new(self.user_id, msg.0));
+            .send(DispatchMessage(FollowRequestAccepted(self.user_id), msg.0));
 
         Ok(self.user_id)
     }
@@ -107,7 +109,7 @@ impl Handler<DenyFollowRequest> for Outbox {
         self.user.send(msg);
 
         self.dispatch
-            .send(DispatchDenyFollowRequest::new(self.user_id, msg.0));
+            .send(DispatchMessage(FollowRequestDenied(self.user_id), msg.0));
 
         Ok(self.user_id)
     }

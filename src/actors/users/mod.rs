@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use actix::SyncAddress;
 
@@ -45,7 +45,7 @@ impl Users {
         self.users.get(&user_id).cloned()
     }
 
-    fn get_users(&self, user_ids: Vec<UserId>) -> (Vec<UserAddress>, Vec<UserId>) {
+    fn get_users(&self, user_ids: BTreeSet<UserId>) -> (Vec<UserAddress>, Vec<UserId>) {
         user_ids.into_iter().fold(
             (Vec::new(), Vec::new()),
             |(mut addrs, mut user_ids), user_id| {

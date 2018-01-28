@@ -26,7 +26,7 @@ impl ResponseType for NewPostOut {
 pub struct GetPostIds;
 
 impl ResponseType for GetPostIds {
-    type Item = Vec<PostId>;
+    type Item = BTreeSet<PostId>;
     type Error = ();
 }
 
@@ -34,7 +34,7 @@ impl ResponseType for GetPostIds {
 pub struct GetUserPostIds;
 
 impl ResponseType for GetUserPostIds {
-    type Item = Vec<PostId>;
+    type Item = BTreeSet<PostId>;
     type Error = ();
 }
 
@@ -50,7 +50,7 @@ impl ResponseType for GetPosts {
 pub struct GetFollowers;
 
 impl ResponseType for GetFollowers {
-    type Item = Vec<UserId>;
+    type Item = BTreeSet<UserId>;
     type Error = ();
 }
 
