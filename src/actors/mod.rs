@@ -85,7 +85,7 @@ mod tests {
     use super::peered::Peered;
     use super::peered::messages::{Message, PeerSize};
     use super::posts::Posts;
-    use super::posts::messages::{PostSize};
+    use super::posts::messages::PostSize;
     use super::user::messages::{AcceptFollowRequest, DenyFollowRequest, GetFollowers, GetPostIds,
                                 GetUserPostIds, NewPostOut, RequestFollow};
     use super::users::{UserAddress, Users};
@@ -112,23 +112,16 @@ mod tests {
         let ping_4 = users_2.call_fut(Message::new(UserSize));
 
         let new_u1 = Message::new(NewUser(users_1.clone()));
-        let u1 = users_1.call_fut(new_u1)
-            .map_err(|_| ())
-            .and_then(|res| res);
+        let u1 = users_1.call_fut(new_u1).map_err(|_| ()).and_then(|res| res);
         let new_u2 = Message::new(NewUser(users_2.clone()));
-        let u2 = users_2.call_fut(new_u2)
-            .map_err(|_| ())
-            .and_then(|res| res);
+        let u2 = users_2.call_fut(new_u2).map_err(|_| ()).and_then(|res| res);
 
         let duration = Duration::from_millis(200);
 
-        let fut = ping_1.join4(ping_2, ping_3, ping_4)
+        let fut = ping_1
+            .join4(ping_2, ping_3, ping_4)
             .map_err(|_| ())
-            .and_then(move |_| {
-                Timer::default()
-                    .sleep(duration)
-                    .map_err(|_| ())
-            })
+            .and_then(move |_| Timer::default().sleep(duration).map_err(|_| ()))
             .and_then(|_| u1.join(u2).map_err(|_| ()))
             .and_then(move |(uid1, uid2)| {
                 let uid_vec = vec![uid1, uid2];
@@ -137,9 +130,7 @@ mod tests {
                     .call_fut(Message::new(LookupMany(uid_vec.clone())))
                     .map_err(|_| ())
                     .and_then(|res| res)
-                    .map(|(user_addrs, _)| {
-                            (uid_vec, user_addrs)
-                    })
+                    .map(|(user_addrs, _)| (uid_vec, user_addrs))
             })
             .map(|(ids_vec, addrs_vec)| {
                 for addr in &addrs_vec {
@@ -191,7 +182,8 @@ mod tests {
                     .sleep(duration)
                     .map_err(|_| ())
                     .map(|_| vecs)
-            }).and_then(move |(_, addrs_vec)| {
+            })
+            .and_then(move |(_, addrs_vec)| {
                 // user 1 should own a post
                 let fut = addrs_vec[1]
                     .user()
@@ -310,7 +302,7 @@ mod tests {
                     .and_then(|_| fut_4)
                     .and_then(|_| fut_5)
                     .and_then(|_| fut_6)
-        });
+            });
 
         handle.spawn(
             arbiter
@@ -319,7 +311,7 @@ mod tests {
                 .and_then(|_: Result<_, ()>| fut)
                 .map(|_| Arbiter::system().send(SystemExit(0)))
                 .map_err(|_| panic!("Future error case")),
-                );
+        );
 
         system.run();
     }

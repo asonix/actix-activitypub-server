@@ -75,7 +75,10 @@ impl Handler<RequestFollow> for Outbox {
     type Result = ();
 
     fn handle(&mut self, msg: RequestFollow, _: &mut Context<Self>) -> Self::Result {
-        debug!("user {:?} requesting to follow user {:?}", self.user_id, msg.0);
+        debug!(
+            "user {:?} requesting to follow user {:?}",
+            self.user_id, msg.0
+        );
         self.user.send(msg);
 
         self.dispatch

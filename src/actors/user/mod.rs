@@ -77,7 +77,10 @@ impl User {
     }
 
     fn new_post(&mut self, post_id: PostId, user_id: UserId) {
-        debug!("user {:?} is storing new post {:?} from user {:?}", self.user_id, post_id, user_id);
+        debug!(
+            "user {:?} is storing new post {:?} from user {:?}",
+            self.user_id, post_id, user_id
+        );
         if user_id == self.user_id {
             self.my_posts.insert(post_id);
         } else {
@@ -91,7 +94,10 @@ impl User {
     }
 
     fn follow_request(&mut self, user_id: UserId) {
-        debug!("user {:?} received follow request from user {:?}", self.user_id, user_id);
+        debug!(
+            "user {:?} received follow request from user {:?}",
+            self.user_id, user_id
+        );
         self.follow_requests.insert(user_id);
     }
 
@@ -107,7 +113,10 @@ impl User {
     }
 
     fn answer_follow_request(&mut self, user_id: UserId) -> Option<UserId> {
-        debug!("user {:?} is answering follow request from user {:?}", self.user_id, user_id);
+        debug!(
+            "user {:?} is answering follow request from user {:?}",
+            self.user_id, user_id
+        );
         if self.follow_requests.remove(&user_id) {
             Some(user_id)
         } else {

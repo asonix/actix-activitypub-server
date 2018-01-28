@@ -8,7 +8,7 @@ use super::posts::Posts;
 use super::user::User;
 use super::user::inbox::Inbox;
 use super::user::outbox::Outbox;
-use super::peered::{PeeredInner, HandleMessage, HandleAnnounce};
+use super::peered::{HandleAnnounce, HandleMessage, PeeredInner};
 
 pub mod messages;
 mod user_address;

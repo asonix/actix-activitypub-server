@@ -27,7 +27,10 @@ pub trait HandleMessage<M> {
     type Error: Send;
 
     /// Handle an incomming message, returning a response and an optional broacast message
-    fn handle_message(&mut self, message: M) -> (Result<Self::Item, Self::Error>, Option<Self::Broadcast>);
+    fn handle_message(
+        &mut self,
+        message: M,
+    ) -> (Result<Self::Item, Self::Error>, Option<Self::Broadcast>);
 }
 
 pub trait HandleAnnounce<B> {
@@ -159,7 +162,10 @@ where
 
 impl<T, M> Handler<Message<T, M>> for Peered<T>
 where
-    T: HandleMessage<M> + HandleAnnounce<<T as HandleMessage<M>>::Broadcast> + PeeredInner + 'static,
+    T: HandleMessage<M>
+        + HandleAnnounce<<T as HandleMessage<M>>::Broadcast>
+        + PeeredInner
+        + 'static,
 {
     type Result = Result<<T as HandleMessage<M>>::Item, <T as HandleMessage<M>>::Error>;
 

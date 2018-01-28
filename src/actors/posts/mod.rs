@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use super::{Id, PostId, PostsId, UserId};
-use super::peered::{PeeredInner, HandleMessage, HandleAnnounce};
+use super::peered::{HandleAnnounce, HandleMessage, PeeredInner};
 
 pub mod messages;
 mod post;
