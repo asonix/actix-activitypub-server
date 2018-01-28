@@ -77,6 +77,7 @@ impl User {
     }
 
     fn new_post(&mut self, post_id: PostId, user_id: UserId) {
+        debug!("user {:?} is storing new post {:?} from user {:?}", self.user_id, post_id, user_id);
         if user_id == self.user_id {
             self.my_posts.insert(post_id);
         } else {
@@ -85,16 +86,33 @@ impl User {
     }
 
     fn followers(&self) -> Vec<UserId> {
+        debug!("followers requested for user {:?}", self.user_id);
         self.followers.iter().cloned().collect()
     }
 
     fn follow_request(&mut self, user_id: UserId) {
+        debug!("user {:?} received follow request from user {:?}", self.user_id, user_id);
         self.follow_requests.insert(user_id);
     }
 
-    fn answer_follow_request(&mut self, user_id: UserId) -> UserId {
-        self.follow_requests.remove(&user_id);
-        self.user_id
+    fn accept_follow_request(&mut self, user_id: UserId) -> Option<UserId> {
+        self.answer_follow_request(user_id).map(|user_id| {
+            self.followers.insert(user_id);
+            self.user_id
+        })
+    }
+
+    fn deny_follow_request(&mut self, user_id: UserId) -> Option<UserId> {
+        self.answer_follow_request(user_id).map(|_| self.user_id)
+    }
+
+    fn answer_follow_request(&mut self, user_id: UserId) -> Option<UserId> {
+        debug!("user {:?} is answering follow request from user {:?}", self.user_id, user_id);
+        if self.follow_requests.remove(&user_id) {
+            Some(user_id)
+        } else {
+            None
+        }
     }
 
     fn request_follow(&mut self, user_id: UserId) {
@@ -159,7 +177,7 @@ impl Handler<AcceptFollowRequest> for User {
     type Result = Result<UserId, ()>;
 
     fn handle(&mut self, msg: AcceptFollowRequest, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.answer_follow_request(msg.0))
+        self.accept_follow_request(msg.0).ok_or(())
     }
 }
 
@@ -167,7 +185,7 @@ impl Handler<DenyFollowRequest> for User {
     type Result = Result<UserId, ()>;
 
     fn handle(&mut self, msg: DenyFollowRequest, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.answer_follow_request(msg.0))
+        self.deny_follow_request(msg.0).ok_or(())
     }
 }
 

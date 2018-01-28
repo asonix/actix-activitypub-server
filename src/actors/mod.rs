@@ -79,17 +79,152 @@ mod tests {
     use futures::{Future, Stream};
     use futures::future;
     use futures::stream::iter_ok;
-    use tokio_core::reactor::Timeout;
+    use tokio_timer::Timer;
 
     use super::{Id, UserId};
     use super::peered::Peered;
     use super::peered::messages::{Message, PeerSize};
     use super::posts::Posts;
     use super::posts::messages::{PostSize};
-    use super::user::messages::{AcceptFollowRequest, DenyFollowRequest, GetPostIds,
+    use super::user::messages::{AcceptFollowRequest, DenyFollowRequest, GetFollowers, GetPostIds,
                                 GetUserPostIds, NewPostOut, RequestFollow};
     use super::users::{UserAddress, Users};
-    use super::users::messages::{Lookup, NewUser, UserSize};
+    use super::users::messages::{Lookup, LookupMany, NewUser, UserSize};
+
+    #[test]
+    fn peered_users_can_iteract() {
+        let system = System::new("test");
+        let handle = Arbiter::handle();
+
+        let posts_1: SyncAddress<_> = Peered::new(Posts::new(Id(0))).start();
+        let posts_2: SyncAddress<_> = Peered::new(Posts::new(Id(1)))
+            .add_peer(posts_1.clone())
+            .start();
+
+        let users_1: SyncAddress<_> = Peered::new(Users::new(Id(0), posts_1.clone())).start();
+        let users_2: SyncAddress<_> = Peered::new(Users::new(Id(1), posts_2.clone()))
+            .add_peer(users_1.clone())
+            .start();
+
+        let ping_1 = posts_1.call_fut(Message::new(PostSize));
+        let ping_2 = posts_2.call_fut(Message::new(PostSize));
+        let ping_3 = users_1.call_fut(Message::new(UserSize));
+        let ping_4 = users_2.call_fut(Message::new(UserSize));
+
+        let new_u1 = Message::new(NewUser(users_1.clone()));
+        let u1 = users_1.call_fut(new_u1)
+            .map_err(|_| ())
+            .and_then(|res| res);
+        let new_u2 = Message::new(NewUser(users_2.clone()));
+        let u2 = users_2.call_fut(new_u2)
+            .map_err(|_| ())
+            .and_then(|res| res);
+
+        let duration = Duration::from_millis(200);
+
+        let fut = ping_1.join4(ping_2, ping_3, ping_4)
+            .map_err(|_| ())
+            .and_then(move |_| {
+                Timer::default()
+                    .sleep(duration)
+                    .map_err(|_| ())
+            })
+            .and_then(|_| u1.join(u2).map_err(|_| ()))
+            .and_then(move |(uid1, uid2)| {
+                let uid_vec = vec![uid1, uid2];
+
+                users_1
+                    .call_fut(Message::new(LookupMany(uid_vec.clone())))
+                    .map_err(|_| ())
+                    .and_then(|res| res)
+                    .map(|(user_addrs, _)| {
+                            (uid_vec, user_addrs)
+                    })
+            })
+            .map(|(ids_vec, addrs_vec)| {
+                for addr in &addrs_vec {
+                    // ping each address
+                    addr.user().send(GetFollowers);
+                }
+
+                (ids_vec, addrs_vec)
+            })
+            .and_then(|(ids_vec, addrs_vec)| {
+                assert_eq!(addrs_vec.len(), 2);
+                // User 0 requests to follow User 1
+                addrs_vec[0]
+                    .outbox()
+                    .call_fut(RequestFollow(ids_vec[1]))
+                    .map_err(|_| ())
+                    .map(|_| (ids_vec, addrs_vec))
+            })
+            .and_then(move |vecs| {
+                Timer::default()
+                    .sleep(duration)
+                    .map_err(|_| ())
+                    .map(|_| vecs)
+            })
+            .and_then(|(ids_vec, addrs_vec)| {
+                // user 1 accepts user 0's follow request
+                addrs_vec[1]
+                    .outbox()
+                    .call_fut(AcceptFollowRequest(ids_vec[0]))
+                    .map_err(|_| ())
+                    .map(|_| (ids_vec, addrs_vec))
+            })
+            .and_then(move |vecs| {
+                Timer::default()
+                    .sleep(duration)
+                    .map_err(|_| ())
+                    .map(|_| vecs)
+            })
+            .and_then(move |(ids_vec, addrs_vec)| {
+                // user 1 makes post
+                addrs_vec[1]
+                    .outbox()
+                    .call_fut(NewPostOut)
+                    .map_err(|_| ())
+                    .map(|_| (ids_vec, addrs_vec))
+            })
+            .and_then(move |vecs| {
+                Timer::default()
+                    .sleep(duration)
+                    .map_err(|_| ())
+                    .map(|_| vecs)
+            }).and_then(move |(_, addrs_vec)| {
+                // user 1 should own a post
+                let fut = addrs_vec[1]
+                    .user()
+                    .call_fut(GetUserPostIds)
+                    .map_err(|_| ())
+                    .and_then(|res| res)
+                    .map(|post_ids| assert!(!post_ids.is_empty()));
+
+                // user 0 should have a post in inbox
+                let fut2 = addrs_vec[0]
+                    .user()
+                    .call_fut(GetPostIds)
+                    .map_err(|_| ())
+                    .and_then(|res| res)
+                    .map(|post_ids| assert!(!post_ids.is_empty()));
+
+                // user 0 should not own a post
+                let fut3 = addrs_vec[0]
+                    .user()
+                    .call_fut(GetUserPostIds)
+                    .map_err(|_| ())
+                    .and_then(|res| res)
+                    .map(|post_ids| assert!(post_ids.is_empty()));
+
+                fut.and_then(|_| fut2).and_then(|_| fut3)
+            })
+            .map(|_| Arbiter::system().send(SystemExit(0)))
+            .map_err(|_| panic!("Future error case"));
+
+        handle.spawn(fut);
+
+        system.run();
+    }
 
     #[test]
     fn users_and_posts_peering() {
@@ -120,8 +255,6 @@ mod tests {
         let ping_5 = users_2.call_fut(Message::new(UserSize));
         let ping_6 = users_3.call_fut(Message::new(UserSize));
 
-        let timeout = Timeout::new(Duration::from_secs(1), &handle).unwrap();
-
         let fut = ping_1
             .and_then(|_| ping_2)
             .and_then(|_| ping_3)
@@ -129,7 +262,11 @@ mod tests {
             .and_then(|_| ping_5)
             .and_then(|_| ping_6)
             .map_err(|_| ())
-            .and_then(|_| timeout.map_err(|_| ()))
+            .and_then(|_| {
+                Timer::default()
+                    .sleep(Duration::from_secs(1))
+                    .map_err(|_| ())
+            })
             .and_then(move |_| {
                 let fut_1 = posts_1
                     .call_fut(PeerSize)
@@ -198,7 +335,7 @@ mod tests {
             // User 0 requests to follow User 1
             addrs_vec[0].outbox().send(RequestFollow(ids_vec[1]));
 
-            // user 1 accepts user 0's follow request
+            // user 1 denies user 0's follow request
             addrs_vec[1].outbox().send(DenyFollowRequest(ids_vec[0]));
 
             // user 1 makes post
@@ -274,7 +411,23 @@ mod tests {
                 .and_then(|res| res)
                 .map(|post_ids| assert!(!post_ids.is_empty()));
 
-            fut.and_then(|_| fut2).and_then(|_| fut3)
+            // user 0 should not own a post
+            let fut4 = addrs_vec[0]
+                .user()
+                .call_fut(GetUserPostIds)
+                .map_err(|_| ())
+                .and_then(|res| res)
+                .map(|post_ids| assert!(post_ids.is_empty()));
+
+            // user 2 should not own a post
+            let fut5 = addrs_vec[2]
+                .user()
+                .call_fut(GetUserPostIds)
+                .map_err(|_| ())
+                .and_then(|res| res)
+                .map(|post_ids| assert!(post_ids.is_empty()));
+
+            fut.join5(fut2, fut3, fut4, fut5).map(|_| ())
         })
     }
 
@@ -289,14 +442,14 @@ mod tests {
         let posts: SyncAddress<_> = Peered::new(Posts::new(Id(0))).start();
         let users: SyncAddress<_> = Peered::new(Users::new(Id(0), posts)).start();
 
-        let users2 = users.clone();
+        let users_clone = users.clone();
 
         let user_addrs_fut = iter_ok(0..3)
             .and_then(move |_| users.call_fut(Message::new(NewUser(users.clone()))))
             .map_err(|_| ())
             .and_then(|res| res)
             .and_then(move |user_id| {
-                users2
+                users_clone
                     .call_fut(Message::new(Lookup(user_id)))
                     .map(move |res| res.map(|user_addr| (user_id, user_addr)))
                     .map_err(|_| ())
@@ -304,7 +457,7 @@ mod tests {
             .and_then(|res| res)
             .fold(Vec::new(), |mut acc, (user_id, user_addr)| {
                 acc.push((user_id, user_addr));
-                Ok(acc)
+                Ok(acc) as Result<_, ()>
             })
             .and_then(|users| {
                 let (ids, addrs) = users.into_iter().unzip();

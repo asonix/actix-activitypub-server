@@ -6,7 +6,9 @@ authors = ["Riley Trautman <asonix.dev@gmail.com>"]
 [dependencies]
 actix = "0.4"
 actix-web = "0.3"
+env_logger = "0.5"
 futures = "0.1"
+log = "0.4"
 
 [dev-dependencies]
-tokio-core = "0.1"
+tokio-timer = "0.1"

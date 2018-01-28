@@ -48,6 +48,7 @@ impl Handler<NewPostOut> for Outbox {
         let dispatch = self.dispatch.clone();
         let user = self.user.clone();
         let user_id = self.user_id;
+        debug!("user {:?} is creating a new post", user_id);
 
         let fut = self.posts
             .call_fut(Message::new(NewPost(user_id)))
@@ -57,6 +58,7 @@ impl Handler<NewPostOut> for Outbox {
                 let res = post_result.and_then(|pid| followers_result.map(|f| (pid, f)));
 
                 if let Ok((post_id, recipients)) = res {
+                    debug!("Dispatching {:?} to recipients: {:?}", post_id, recipients);
                     user.send(NewPostIn(post_id, user_id));
 
                     dispatch.send(DispatchPost(post_id, user_id, recipients));
@@ -73,6 +75,7 @@ impl Handler<RequestFollow> for Outbox {
     type Result = ();
 
     fn handle(&mut self, msg: RequestFollow, _: &mut Context<Self>) -> Self::Result {
+        debug!("user {:?} requesting to follow user {:?}", self.user_id, msg.0);
         self.user.send(msg);
 
         self.dispatch

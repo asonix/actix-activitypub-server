@@ -34,7 +34,7 @@ impl Handler<DispatchPost> for Dispatch {
 
         let fut = self.users
             .call_fut(Message::new(LookupMany(user_ids)))
-            .map_err(|e| println!("Error: {}", e))
+            .map_err(|e| error!("Error: {}", e))
             .and_then(|result| result)
             .and_then(move |(addrs, _)| {
                 for addr in addrs {
@@ -59,7 +59,7 @@ impl Handler<DispatchFollowRequest> for Dispatch {
 
         let fut = self.users
             .call_fut(Message::new(Lookup(target_user)))
-            .map_err(|e| println!("Error: {}", e))
+            .map_err(|e| error!("Error: {}", e))
             .and_then(|result| result)
             .map(move |addr| {
                 addr.inbox().send(FollowRequest(requesting_user));
@@ -80,7 +80,7 @@ impl Handler<DispatchAcceptFollowRequest> for Dispatch {
 
         let fut = self.users
             .call_fut(Message::new(Lookup(target_user)))
-            .map_err(|e| println!("Error: {}", e))
+            .map_err(|e| error!("Error: {}", e))
             .and_then(|result| result)
             .map(move |addr| addr.inbox().send(FollowRequestAccepted(accepting_user)));
 
@@ -99,7 +99,7 @@ impl Handler<DispatchDenyFollowRequest> for Dispatch {
 
         let fut = self.users
             .call_fut(Message::new(Lookup(target_user)))
-            .map_err(|e| println!("Error: {}", e))
+            .map_err(|e| error!("Error: {}", e))
             .and_then(|result| result)
             .map(move |addr| addr.inbox().send(FollowRequestDenied(denying_user)));
 
