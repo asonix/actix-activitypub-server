@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 
 use super::{PostId, UserId};
 
@@ -6,6 +7,7 @@ use super::{PostId, UserId};
 pub struct Post {
     pub post_id: PostId,
     pub author: UserId,
+    pub mentions: BTreeSet<UserId>,
 }
 
 impl Ord for Post {

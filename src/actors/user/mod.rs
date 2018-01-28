@@ -18,6 +18,7 @@ pub struct User {
     following: BTreeSet<UserId>,
     follow_requests: BTreeSet<UserId>,
     pending_follows: BTreeSet<UserId>,
+    blocklist: BTreeSet<UserId>,
 }
 
 impl User {
@@ -30,6 +31,7 @@ impl User {
             following: BTreeSet::new(),
             follow_requests: BTreeSet::new(),
             pending_follows: BTreeSet::new(),
+            blocklist: BTreeSet::new(),
         }
     }
 
@@ -76,15 +78,20 @@ impl User {
         post_ids
     }
 
-    fn new_post(&mut self, post_id: PostId, user_id: UserId) {
+    fn new_post(&mut self, post_id: PostId, user_id: UserId, mentions: BTreeSet<UserId>) {
         debug!(
             "user {:?} is storing new post {:?} from user {:?}",
             self.user_id, post_id, user_id
         );
+
         if user_id == self.user_id {
             self.my_posts.insert(post_id);
-        } else {
+        } else if self.following.contains(&user_id)
+            || (mentions.contains(&self.user_id) && !self.blocklist.contains(&user_id))
+        {
             self.posts.insert(post_id);
+        } else {
+            error!("Should not have recieved post from user {:?}", user_id);
         }
     }
 
@@ -146,7 +153,7 @@ impl Handler<NewPostIn> for User {
     type Result = ();
 
     fn handle(&mut self, msg: NewPostIn, _: &mut Context<Self>) -> Self::Result {
-        self.new_post(msg.0, msg.1);
+        self.new_post(msg.0, msg.1, msg.2);
     }
 }
 

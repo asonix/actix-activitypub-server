@@ -1,7 +1,9 @@
+use std::collections::BTreeSet;
+
 use super::{Post, PostId, UserId};
 
 #[derive(Clone, Debug)]
-pub struct NewPost(pub UserId);
+pub struct NewPost(pub UserId, pub BTreeSet<UserId>);
 
 #[derive(Clone, Debug)]
 pub struct DeletePost(pub PostId);

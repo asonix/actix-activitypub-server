@@ -1,25 +1,28 @@
+use std::collections::BTreeSet;
+
 use actix::{ResponseType, SyncAddress};
 
 use super::{PostId, UserId};
 use actors::peered::Peered;
 use actors::posts::Posts;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct NewPostIn(pub PostId, pub UserId);
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NewPostIn(pub PostId, pub UserId, pub BTreeSet<UserId>);
 
 impl ResponseType for NewPostIn {
     type Item = ();
     type Error = ();
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct NewPostOut;
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NewPostOut(pub BTreeSet<UserId>);
 
 impl ResponseType for NewPostOut {
     type Item = ();
     type Error = ();
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GetPostIds;
 
 impl ResponseType for GetPostIds {
@@ -27,6 +30,7 @@ impl ResponseType for GetPostIds {
     type Error = ();
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GetUserPostIds;
 
 impl ResponseType for GetUserPostIds {
@@ -34,6 +38,7 @@ impl ResponseType for GetUserPostIds {
     type Error = ();
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GetPosts;
 
 impl ResponseType for GetPosts {
@@ -81,6 +86,7 @@ impl ResponseType for RequestFollow {
     type Error = ();
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FollowRequestAccepted(pub UserId);
 
 impl ResponseType for FollowRequestAccepted {

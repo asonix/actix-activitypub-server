@@ -44,14 +44,15 @@ impl Actor for Outbox {
 impl Handler<NewPostOut> for Outbox {
     type Result = ();
 
-    fn handle(&mut self, _: NewPostOut, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: NewPostOut, _: &mut Context<Self>) -> Self::Result {
+        let mentions = msg.0;
         let dispatch = self.dispatch.clone();
         let user = self.user.clone();
         let user_id = self.user_id;
         debug!("user {:?} is creating a new post", user_id);
 
         let fut = self.posts
-            .call_fut(Message::new(NewPost(user_id)))
+            .call_fut(Message::new(NewPost(user_id, mentions.clone())))
             .join(self.user.call_fut(GetFollowers))
             .map_err(|_| ())
             .and_then(move |(post_result, followers_result)| {
@@ -59,9 +60,9 @@ impl Handler<NewPostOut> for Outbox {
 
                 if let Ok((post_id, recipients)) = res {
                     debug!("Dispatching {:?} to recipients: {:?}", post_id, recipients);
-                    user.send(NewPostIn(post_id, user_id));
+                    user.send(NewPostIn(post_id, user_id, mentions.clone()));
 
-                    dispatch.send(DispatchPost(post_id, user_id, recipients));
+                    dispatch.send(DispatchPost(post_id, user_id, mentions, recipients));
                 }
 
                 Ok(())

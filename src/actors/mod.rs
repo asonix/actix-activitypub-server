@@ -72,6 +72,7 @@ impl PartialOrd for UserId {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
     use std::time::Duration;
 
     use actix::{Actor, Arbiter, SyncAddress, System};
@@ -173,7 +174,7 @@ mod tests {
                 // user 1 makes post
                 addrs_vec[1]
                     .outbox()
-                    .call_fut(NewPostOut)
+                    .call_fut(NewPostOut(BTreeSet::new()))
                     .map_err(|_| ())
                     .map(|_| (ids_vec, addrs_vec))
             })
@@ -331,7 +332,7 @@ mod tests {
             addrs_vec[1].outbox().send(DenyFollowRequest(ids_vec[0]));
 
             // user 1 makes post
-            addrs_vec[1].outbox().send(NewPostOut);
+            addrs_vec[1].outbox().send(NewPostOut(BTreeSet::new()));
 
             // user 1 should own a post
             let fut = addrs_vec[1]
@@ -377,7 +378,7 @@ mod tests {
             addrs_vec[1].outbox().send(AcceptFollowRequest(ids_vec[2]));
 
             // user 1 makes post
-            addrs_vec[1].outbox().send(NewPostOut);
+            addrs_vec[1].outbox().send(NewPostOut(BTreeSet::new()));
 
             // user 1 owns post
             let fut = addrs_vec[1]

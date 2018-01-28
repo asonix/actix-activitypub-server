@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use actix::{Actor, Arbiter, Context, Handler, SyncAddress};
 use futures::Future;
 
@@ -30,15 +32,20 @@ impl Handler<DispatchPost> for Dispatch {
     type Result = ();
 
     fn handle(&mut self, msg: DispatchPost, _: &mut Context<Self>) -> Self::Result {
-        let DispatchPost(post_id, user_id, user_ids) = msg;
+        let DispatchPost(post_id, user_id, mentions, recipients) = msg;
+
+        let mut ids_set = BTreeSet::new();
+        ids_set.extend(recipients);
+        ids_set.extend(mentions.clone());
 
         let fut = self.users
-            .call_fut(Message::new(LookupMany(user_ids)))
+            .call_fut(Message::new(LookupMany(ids_set.into_iter().collect())))
             .map_err(|e| error!("Error: {}", e))
             .and_then(|result| result)
             .and_then(move |(addrs, _)| {
                 for addr in addrs {
-                    addr.inbox().send(NewPostIn(post_id, user_id));
+                    addr.inbox()
+                        .send(NewPostIn(post_id, user_id, mentions.clone()));
                 }
 
                 Ok(())

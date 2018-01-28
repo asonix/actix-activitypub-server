@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::{Id, PostId, PostsId, UserId};
 use super::peered::{HandleAnnounce, HandleMessage, PeeredInner};
@@ -34,9 +34,13 @@ impl Posts {
         PostId::new(self.posts_id, post_id)
     }
 
-    fn new_post(&mut self, author: UserId) -> (PostId, Post) {
+    fn new_post(&mut self, author: UserId, mentions: BTreeSet<UserId>) -> (PostId, Post) {
         let post_id = self.generate_post_id();
-        let post = Post { post_id, author };
+        let post = Post {
+            post_id,
+            author,
+            mentions,
+        };
 
         self.add_post(post_id, post.clone());
 
@@ -106,7 +110,7 @@ impl HandleMessage<NewPost> for Posts {
     type Error = ();
 
     fn handle_message(&mut self, msg: NewPost) -> (Result<PostId, ()>, Option<NewPostFull>) {
-        let (post_id, post) = self.new_post(msg.0);
+        let (post_id, post) = self.new_post(msg.0, msg.1);
 
         (Ok(post_id), Some(NewPostFull(post_id, post)))
     }
