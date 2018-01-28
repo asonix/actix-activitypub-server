@@ -4,8 +4,8 @@ use super::{PostId, UserId};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Post {
-    post_id: PostId,
-    author: UserId,
+    pub post_id: PostId,
+    pub author: UserId,
 }
 
 impl Ord for Post {

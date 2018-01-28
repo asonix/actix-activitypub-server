@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
-use actix::{Actor, Address, AsyncContext, Context, Handler, SyncAddress};
+use actix::SyncAddress;
 
 use super::{Id, UserId, UsersId};
+use super::peered::Peered;
 use super::posts::Posts;
 use super::user::User;
 use super::user::inbox::Inbox;
@@ -21,11 +22,11 @@ pub struct Users {
     users_id: UsersId,
     current_id: u64,
     users: BTreeMap<UserId, UserAddress>,
-    posts: SyncAddress<Posts>,
+    posts: SyncAddress<Peered<Posts>>,
 }
 
 impl Users {
-    pub fn new(users_id: UsersId, posts: SyncAddress<Posts>) -> Self {
+    pub fn new(users_id: UsersId, posts: SyncAddress<Peered<Posts>>) -> Self {
         Users {
             users_id: users_id,
             current_id: 0,
@@ -63,7 +64,7 @@ impl Users {
         self.users.insert(user_id, user_address);
     }
 
-    fn new_user(&mut self, users: SyncAddress<Users>) -> (UserId, UserAddress) {
+    fn new_user(&mut self, users: SyncAddress<Peered<Users>>) -> (UserId, UserAddress) {
         let posts = self.posts.clone();
         let user_id = self.gen_next_id();
         let user_address = UserAddress::new(user_id, posts, users);
@@ -79,7 +80,7 @@ impl Users {
 }
 
 impl PeeredInner for Users {
-    type Backfill = (usize, Vec<UserAddress>);
+    type Backfill = (usize, Vec<(UserId, UserAddress)>);
     type Request = usize;
 
     fn backfill(&self, req: Self::Request) -> Self::Backfill {
@@ -110,82 +111,75 @@ impl PeeredInner for Users {
     }
 }
 
-impl HandleMessage for Users {
-    type Message = Lookup;
+impl HandleMessage<Lookup> for Users {
     type Broadcast = ();
     type Item = UserAddress;
     type Error = ();
 
-    fn handle_message(&mut self, msg: Self::Message) -> (Result<UserAddress, ()>, Option<()>) {
+    fn handle_message(&mut self, msg: Lookup) -> (Result<UserAddress, ()>, Option<()>) {
         (self.get_user(msg.0).ok_or(()), None)
     }
 }
 
-impl HandleMessage for Users {
-    type Message = LookupMany;
+impl HandleMessage<LookupMany> for Users {
     type Broadcast = ();
     type Item = (Vec<UserAddress>, Vec<UserId>);
     type Error = ();
 
-    fn handle_message(&mut self, msg: Self::Message) -> Self::Result {
+    fn handle_message(&mut self, msg: LookupMany) -> (Result<Self::Item, ()>, Option<()>) {
         (Ok(self.get_users(msg.0)), None)
     }
 }
 
-impl HandleMessage for Users {
-    type Message = NewUser;
+impl HandleMessage<NewUser> for Users {
     type Broadcast = NewUserFull;
     type Item = UserId;
     type Error = ();
 
-    fn handle_message(&mut self, msg: Self::Message) -> Self::Result {
+    fn handle_message(&mut self, msg: NewUser) -> (Result<Self::Item, ()>, Option<NewUserFull>) {
         let (user_id, user_address) = self.new_user(msg.0);
 
         (Ok(user_id), Some(NewUserFull(user_id, user_address)))
     }
 }
 
-impl HandleMessage for Users {
-    type Message = DeleteUser;
+impl HandleMessage<DeleteUser> for Users {
     type Broadcast = DeleteUser;
     type Item = ();
     type Error = ();
 
-    fn handle_message(&mut self, msg: Self::Message) -> Self::Result {
+    fn handle_message(&mut self, msg: DeleteUser) -> (Result<(), ()>, Option<DeleteUser>) {
         self.delete_user(msg.0);
 
         (Ok(()), Some(msg))
     }
 }
 
-impl HandleMessage for Users {
-    type Message = UserSize;
+impl HandleMessage<UserSize> for Users {
     type Broadcast = ();
     type Item = usize;
     type Error = ();
 
-    fn handle_message(&mut self, _: Self::Message) -> Self::Result {
+    fn handle_message(&mut self, _: UserSize) -> (Result<usize, ()>, Option<()>) {
         (Ok(self.users.len()), None)
     }
 }
 
-impl HandleAnnounce for Users {
-    type Broadcast = NewUserFull;
+impl HandleAnnounce<NewUserFull> for Users {
     type Item = ();
     type Error = ();
 
-    fn handle_announce(&mut self, msg: Self::Broadcast) -> Self::Result {
+    fn handle_announce(&mut self, msg: NewUserFull) -> Result<(), ()> {
         self.add_user(msg.0, msg.1);
         Ok(())
     }
 }
 
-impl HandleAnnounce for Users {
-    type Broadcast = DeleteUser;
+impl HandleAnnounce<DeleteUser> for Users {
     type Item = ();
     type Error = ();
 
-    fn handle_announce(&mut self, msg: Self::Broadcast) -> Self::Result {
+    fn handle_announce(&mut self, msg: DeleteUser) -> Result<(), ()> {
         self.delete_user(msg.0);
         Ok(())
     }

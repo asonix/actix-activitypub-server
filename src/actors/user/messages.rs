@@ -1,6 +1,7 @@
 use actix::{ResponseType, SyncAddress};
 
 use super::{PostId, UserId};
+use actors::peered::Peered;
 use actors::posts::Posts;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -36,7 +37,7 @@ impl ResponseType for GetUserPostIds {
 pub struct GetPosts;
 
 impl ResponseType for GetPosts {
-    type Item = SyncAddress<Posts>;
+    type Item = SyncAddress<Peered<Posts>>;
     type Error = ();
 }
 

@@ -1,6 +1,7 @@
-use actix::{ResponseType, SyncAddress};
+use actix::SyncAddress;
 
 use super::{UserAddress, UserId, Users};
+use actors::peered::Peered;
 
 #[derive(Clone, Debug)]
 pub struct Lookup(pub UserId);
@@ -9,7 +10,7 @@ pub struct Lookup(pub UserId);
 pub struct LookupMany(pub Vec<UserId>);
 
 #[derive(Clone)]
-pub struct NewUser(pub SyncAddress<Users>);
+pub struct NewUser(pub SyncAddress<Peered<Users>>);
 
 #[derive(Clone)]
 pub struct NewUserFull(pub UserId, pub UserAddress);

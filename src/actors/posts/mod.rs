@@ -1,7 +1,5 @@
 use std::collections::BTreeMap;
 
-use actix::{Actor, AsyncContext, Context, Handler, SyncAddress};
-
 use super::{Id, PostId, PostsId, UserId};
 use super::peered::{PeeredInner, HandleMessage, HandleAnnounce};
 
@@ -71,7 +69,7 @@ impl Posts {
 }
 
 impl PeeredInner for Posts {
-    type Backfill = (usize, Vec<Post>);
+    type Backfill = (usize, Vec<(PostId, Post)>);
     type Request = usize;
 
     fn backfill(&self, req: Self::Request) -> Self::Backfill {
@@ -102,71 +100,66 @@ impl PeeredInner for Posts {
     }
 }
 
-impl HandleMessage for Posts {
-    type Message = NewPost;
+impl HandleMessage<NewPost> for Posts {
     type Broadcast = NewPostFull;
     type Item = PostId;
     type Error = ();
 
-    fn handle_message(&mut self, msg: Self::Message) -> Self::Result {
+    fn handle_message(&mut self, msg: NewPost) -> (Result<PostId, ()>, Option<NewPostFull>) {
         let (post_id, post) = self.new_post(msg.0);
 
         (Ok(post_id), Some(NewPostFull(post_id, post)))
     }
 }
 
-impl HandleMessage for Posts {
-    type Message = DeletePost;
+impl HandleMessage<DeletePost> for Posts {
     type Broadcast = DeletePost;
     type Item = ();
     type Error = ();
 
-    fn handle_message(&mut self, msg: Self::Message) -> Self::Result {
+    fn handle_message(&mut self, msg: DeletePost) -> (Result<(), ()>, Option<DeletePost>) {
         self.delete_post(msg.0);
 
         (Ok(()), Some(msg))
     }
 }
 
-impl HandleMessage for Posts {
-    type Message = GetPostsByIds;
+impl HandleMessage<GetPostsByIds> for Posts {
     type Broadcast = ();
     type Item = Vec<Post>;
     type Error = ();
 
-    fn handle_message(&mut self, msg: Self::Message) -> Self::Result {
-        (Ok(self.get_posts()), None)
+    fn handle_message(&mut self, msg: GetPostsByIds) -> (Result<Vec<Post>, ()>, Option<()>) {
+        (Ok(self.get_posts(msg.0)), None)
     }
 }
 
-impl HandleMessage for Posts {
-    type Message = PostSize;
+impl HandleMessage<PostSize> for Posts {
     type Broadcast = ();
     type Item = usize;
     type Error = ();
 
-    fn handle_message(&mut self, _: Self::Message) -> Self::Result {
+    fn handle_message(&mut self, _: PostSize) -> (Result<usize, ()>, Option<()>) {
         (Ok(self.posts.len()), None)
     }
 }
 
-impl HandleAnnounce for Posts {
-    type Broadcast = NewPostFull;
+impl HandleAnnounce<NewPostFull> for Posts {
     type Item = ();
     type Error = ();
 
-    fn handle_announce(&mut self, msg: Self::Broadcast) -> Self::Result {
+    fn handle_announce(&mut self, msg: NewPostFull) -> Result<(), ()> {
         self.posts.insert(msg.0, msg.1);
         Ok(())
     }
 }
 
-impl HandleAnnounce for Posts {
-    type Broadcast = DeletePost;
+impl HandleAnnounce<DeletePost> for Posts {
     type Item = ();
     type Error = ();
 
-    fn handle_announce(&mut self, msg: Self::Broadcast) -> Self::Result {
+    fn handle_announce(&mut self, msg: DeletePost) -> Result<(), ()> {
         self.delete_post(msg.0);
+        Ok(())
     }
 }

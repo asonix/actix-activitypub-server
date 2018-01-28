@@ -1,6 +1,4 @@
-use actix::{ResponseType, SyncAddress};
-
-use super::{Post, PostId, Posts, UserId};
+use super::{Post, PostId, UserId};
 
 #[derive(Clone, Debug)]
 pub struct NewPost(pub UserId);

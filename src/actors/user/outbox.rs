@@ -4,6 +4,8 @@ use futures::Future;
 use actors::dispatch::Dispatch;
 use actors::dispatch::messages::{DispatchAcceptFollowRequest, DispatchDenyFollowRequest,
                                  DispatchFollowRequest, DispatchPost};
+use actors::peered::Peered;
+use actors::peered::messages::Message;
 use actors::posts::Posts;
 use actors::posts::messages::NewPost;
 use actors::users::Users;
@@ -13,7 +15,7 @@ use super::{User, UserId};
 pub struct Outbox {
     user_id: UserId,
     user: Address<User>,
-    posts: SyncAddress<Posts>,
+    posts: SyncAddress<Peered<Posts>>,
     dispatch: Address<Dispatch>,
 }
 
@@ -21,8 +23,8 @@ impl Outbox {
     pub fn new(
         user_id: UserId,
         user: Address<User>,
-        posts: SyncAddress<Posts>,
-        users: SyncAddress<Users>,
+        posts: SyncAddress<Peered<Posts>>,
+        users: SyncAddress<Peered<Users>>,
     ) -> Self {
         let dispatch = Dispatch::new(users).start();
 
@@ -48,7 +50,7 @@ impl Handler<NewPostOut> for Outbox {
         let user_id = self.user_id;
 
         let fut = self.posts
-            .call_fut(NewPost(user_id))
+            .call_fut(Message::new(NewPost(user_id)))
             .join(self.user.call_fut(GetFollowers))
             .map_err(|_| ())
             .and_then(move |(post_result, followers_result)| {

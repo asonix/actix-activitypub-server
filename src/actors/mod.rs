@@ -1,5 +1,3 @@
-// use actix::{Actor, Address};
-
 pub mod dispatch;
 pub mod peered;
 pub mod posts;
@@ -84,12 +82,14 @@ mod tests {
     use tokio_core::reactor::Timeout;
 
     use super::{Id, UserId};
+    use super::peered::Peered;
+    use super::peered::messages::{Message, PeerSize};
     use super::posts::Posts;
-    use super::posts::messages::{PeerSize as PostPeerSize, PostSize};
+    use super::posts::messages::{PostSize};
     use super::user::messages::{AcceptFollowRequest, DenyFollowRequest, GetPostIds,
                                 GetUserPostIds, NewPostOut, RequestFollow};
     use super::users::{UserAddress, Users};
-    use super::users::messages::{Lookup, NewUser, PeerSize as UserPeerSize, UserSize};
+    use super::users::messages::{Lookup, NewUser, UserSize};
 
     #[test]
     fn users_and_posts_peering() {
@@ -97,24 +97,28 @@ mod tests {
         let arbiter = Arbiter::new("test-exec");
         let handle = Arbiter::handle();
 
-        let posts_1: SyncAddress<_> = Posts::new(Id(0)).start();
-        let posts_2: SyncAddress<_> = Posts::new(Id(1)).add_peer(posts_1.clone()).start();
-        let posts_3: SyncAddress<_> = Posts::new(Id(2)).add_peer(posts_2.clone()).start();
+        let posts_1: SyncAddress<_> = Peered::new(Posts::new(Id(0))).start();
+        let posts_2: SyncAddress<_> = Peered::new(Posts::new(Id(1)))
+            .add_peer(posts_1.clone())
+            .start();
+        let posts_3: SyncAddress<_> = Peered::new(Posts::new(Id(2)))
+            .add_peer(posts_2.clone())
+            .start();
 
-        let users_1: SyncAddress<_> = Users::new(Id(0), posts_1.clone()).start();
-        let users_2: SyncAddress<_> = Users::new(Id(1), posts_2.clone())
+        let users_1: SyncAddress<_> = Peered::new(Users::new(Id(0), posts_1.clone())).start();
+        let users_2: SyncAddress<_> = Peered::new(Users::new(Id(1), posts_2.clone()))
             .add_peer(users_1.clone())
             .start();
-        let users_3: SyncAddress<_> = Users::new(Id(2), posts_2.clone())
+        let users_3: SyncAddress<_> = Peered::new(Users::new(Id(2), posts_2.clone()))
             .add_peer(users_2.clone())
             .start();
 
-        let ping_1 = posts_1.call_fut(PostSize);
-        let ping_2 = posts_2.call_fut(PostSize);
-        let ping_3 = posts_3.call_fut(PostSize);
-        let ping_4 = users_1.call_fut(UserSize);
-        let ping_5 = users_2.call_fut(UserSize);
-        let ping_6 = users_3.call_fut(UserSize);
+        let ping_1 = posts_1.call_fut(Message::new(PostSize));
+        let ping_2 = posts_2.call_fut(Message::new(PostSize));
+        let ping_3 = posts_3.call_fut(Message::new(PostSize));
+        let ping_4 = users_1.call_fut(Message::new(UserSize));
+        let ping_5 = users_2.call_fut(Message::new(UserSize));
+        let ping_6 = users_3.call_fut(Message::new(UserSize));
 
         let timeout = Timeout::new(Duration::from_secs(1), &handle).unwrap();
 
@@ -128,37 +132,37 @@ mod tests {
             .and_then(|_| timeout.map_err(|_| ()))
             .and_then(move |_| {
                 let fut_1 = posts_1
-                    .call_fut(PostPeerSize)
+                    .call_fut(PeerSize)
                     .map_err(|_| ())
                     .and_then(|res| res)
                     .map(|peer_size| assert_eq!(peer_size, 2));
 
                 let fut_2 = posts_2
-                    .call_fut(PostPeerSize)
+                    .call_fut(PeerSize)
                     .map_err(|_| ())
                     .and_then(|res| res)
                     .map(|peer_size| assert_eq!(peer_size, 2));
 
                 let fut_3 = posts_3
-                    .call_fut(PostPeerSize)
+                    .call_fut(PeerSize)
                     .map_err(|_| ())
                     .and_then(|res| res)
                     .map(|peer_size| assert_eq!(peer_size, 2));
 
                 let fut_4 = users_1
-                    .call_fut(UserPeerSize)
+                    .call_fut(PeerSize)
                     .map_err(|_| ())
                     .and_then(|res| res)
                     .map(|peer_size| assert_eq!(peer_size, 2));
 
                 let fut_5 = users_2
-                    .call_fut(UserPeerSize)
+                    .call_fut(PeerSize)
                     .map_err(|_| ())
                     .and_then(|res| res)
                     .map(|peer_size| assert_eq!(peer_size, 2));
 
                 let fut_6 = users_3
-                    .call_fut(UserPeerSize)
+                    .call_fut(PeerSize)
                     .map_err(|_| ())
                     .and_then(|res| res)
                     .map(|peer_size| assert_eq!(peer_size, 2));
@@ -282,18 +286,18 @@ mod tests {
         let system = System::new("test");
         let arbiter = Arbiter::new("test-exec");
 
-        let posts: SyncAddress<_> = Posts::new(Id(0)).start();
-        let users: SyncAddress<_> = Users::new(Id(0), posts).start();
+        let posts: SyncAddress<_> = Peered::new(Posts::new(Id(0))).start();
+        let users: SyncAddress<_> = Peered::new(Users::new(Id(0), posts)).start();
 
         let users2 = users.clone();
 
         let user_addrs_fut = iter_ok(0..3)
-            .and_then(move |_| users.call_fut(NewUser))
+            .and_then(move |_| users.call_fut(Message::new(NewUser(users.clone()))))
             .map_err(|_| ())
             .and_then(|res| res)
             .and_then(move |user_id| {
                 users2
-                    .call_fut(Lookup(user_id))
+                    .call_fut(Message::new(Lookup(user_id)))
                     .map(move |res| res.map(|user_addr| (user_id, user_addr)))
                     .map_err(|_| ())
             })

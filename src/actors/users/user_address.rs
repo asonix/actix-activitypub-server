@@ -1,5 +1,6 @@
 use actix::{Actor, Address, SyncAddress};
 
+use actors::peered::Peered;
 use super::{Inbox, Outbox, Posts, User, UserId, Users};
 
 #[derive(Clone)]
@@ -10,7 +11,7 @@ pub struct UserAddress {
 }
 
 impl UserAddress {
-    pub fn new(user_id: UserId, posts: SyncAddress<Posts>, users: SyncAddress<Users>) -> Self {
+    pub fn new(user_id: UserId, posts: SyncAddress<Peered<Posts>>, users: SyncAddress<Peered<Users>>) -> Self {
         let (user_local, user): (Address<_>, SyncAddress<_>) = User::new(user_id).start();
 
         let inbox = Inbox::new(user_local.clone()).start();

@@ -1,6 +1,8 @@
 use actix::{Actor, Arbiter, Context, Handler, SyncAddress};
 use futures::Future;
 
+use super::peered::Peered;
+use super::peered::messages::Message;
 use super::{PostId, UserId};
 use super::user::messages::{FollowRequest, FollowRequestAccepted, FollowRequestDenied, NewPostIn};
 use super::users::Users;
@@ -11,11 +13,11 @@ pub mod messages;
 use self::messages::*;
 
 pub struct Dispatch {
-    users: SyncAddress<Users>,
+    users: SyncAddress<Peered<Users>>,
 }
 
 impl Dispatch {
-    pub fn new(users: SyncAddress<Users>) -> Self {
+    pub fn new(users: SyncAddress<Peered<Users>>) -> Self {
         Dispatch { users }
     }
 }
@@ -31,7 +33,7 @@ impl Handler<DispatchPost> for Dispatch {
         let DispatchPost(post_id, user_id, user_ids) = msg;
 
         let fut = self.users
-            .call_fut(LookupMany(user_ids))
+            .call_fut(Message::new(LookupMany(user_ids)))
             .map_err(|e| println!("Error: {}", e))
             .and_then(|result| result)
             .and_then(move |(addrs, _)| {
@@ -56,7 +58,7 @@ impl Handler<DispatchFollowRequest> for Dispatch {
         } = msg;
 
         let fut = self.users
-            .call_fut(Lookup(target_user))
+            .call_fut(Message::new(Lookup(target_user)))
             .map_err(|e| println!("Error: {}", e))
             .and_then(|result| result)
             .map(move |addr| {
@@ -77,7 +79,7 @@ impl Handler<DispatchAcceptFollowRequest> for Dispatch {
         } = msg;
 
         let fut = self.users
-            .call_fut(Lookup(target_user))
+            .call_fut(Message::new(Lookup(target_user)))
             .map_err(|e| println!("Error: {}", e))
             .and_then(|result| result)
             .map(move |addr| addr.inbox().send(FollowRequestAccepted(accepting_user)));
@@ -96,7 +98,7 @@ impl Handler<DispatchDenyFollowRequest> for Dispatch {
         } = msg;
 
         let fut = self.users
-            .call_fut(Lookup(target_user))
+            .call_fut(Message::new(Lookup(target_user)))
             .map_err(|e| println!("Error: {}", e))
             .and_then(|result| result)
             .map(move |addr| addr.inbox().send(FollowRequestDenied(denying_user)));
