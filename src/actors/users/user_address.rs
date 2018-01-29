@@ -18,7 +18,7 @@ impl UserAddress {
     ) -> Self {
         let (user_local, user): (Address<_>, SyncAddress<_>) = User::new(user_id).start();
 
-        let inbox = Inbox::new(user_local.clone()).start();
+        let inbox = Inbox::new(user_local.clone(), users.clone()).start();
         let outbox = Outbox::new(user_id, user_local, posts, users).start();
 
         UserAddress {

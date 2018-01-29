@@ -23,7 +23,7 @@ impl ResponseType for NewPostOut {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct GetPostIds;
+pub struct GetPostIds(pub usize);
 
 impl ResponseType for GetPostIds {
     type Item = BTreeSet<PostId>;
@@ -31,7 +31,7 @@ impl ResponseType for GetPostIds {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct GetUserPostIds;
+pub struct GetUserPostIds(pub usize);
 
 impl ResponseType for GetUserPostIds {
     type Item = BTreeSet<PostId>;
@@ -115,5 +115,13 @@ pub struct Blocked(pub UserId);
 
 impl ResponseType for Blocked {
     type Item = ();
+    type Error = ();
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GetBlocklist;
+
+impl ResponseType for GetBlocklist {
+    type Item = BTreeSet<UserId>;
     type Error = ();
 }

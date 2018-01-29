@@ -32,47 +32,56 @@ impl User {
         }
     }
 
-    pub fn get_10_user_post_ids(&self) -> BTreeSet<PostId> {
-        self.my_posts.iter().rev().take(10).cloned().collect()
+    pub fn get_user_post_ids(&self, amount: usize) -> BTreeSet<PostId> {
+        if amount == 0 {
+            self.my_posts.iter().rev().take(amount).cloned().collect()
+        } else {
+            self.my_posts.iter().rev().cloned().collect()
+        }
     }
 
-    pub fn get_10_post_ids(&self) -> BTreeSet<PostId> {
-        let p1 = self.posts.iter().rev().peekable();
-        let p2 = self.my_posts.iter().rev().peekable();
+    pub fn get_post_ids(&self, amount: usize) -> BTreeSet<PostId> {
+        if amount == 0 {
+            let mut posts = self.posts.clone();
+            posts.extend(self.my_posts.clone());
+            posts
+        } else {
+            let p1 = self.posts.iter().rev().peekable();
+            let p2 = self.my_posts.iter().rev().peekable();
+            // Basically merge-sort
+            let (_, _, post_ids) =
+                (0..amount).fold((p1, p2, BTreeSet::new()), |(mut p1, mut p2, mut set), _| {
+                    let use_p2 = {
+                        let joined = p1.peek().and_then(|v1| p2.peek().map(|v2| (v1, v2)));
 
-        // Basically merge-sort
-        let (_, _, post_ids) =
-            (0..10).fold((p1, p2, BTreeSet::new()), |(mut p1, mut p2, mut set), _| {
-                let use_p2 = {
-                    let joined = p1.peek().and_then(|v1| p2.peek().map(|v2| (v1, v2)));
+                        if let Some((v1, v2)) = joined {
+                            Some(v1 < v2)
+                        } else {
+                            None
+                        }
+                    };
 
-                    if let Some((v1, v2)) = joined {
-                        Some(v1 < v2)
+                    let use_p2 = if let Some(use_p2) = use_p2 {
+                        use_p2
                     } else {
-                        None
+                        p2.peek().is_some()
+                    };
+
+                    let post_id = if use_p2 {
+                        p2.next().cloned()
+                    } else {
+                        p1.next().cloned()
+                    };
+
+                    if let Some(post_id) = post_id {
+                        set.insert(post_id);
                     }
-                };
 
-                let use_p2 = if let Some(use_p2) = use_p2 {
-                    use_p2
-                } else {
-                    p2.peek().is_some()
-                };
+                    (p1, p2, set)
+                });
 
-                let post_id = if use_p2 {
-                    p2.next().cloned()
-                } else {
-                    p1.next().cloned()
-                };
-
-                if let Some(post_id) = post_id {
-                    set.insert(post_id);
-                }
-
-                (p1, p2, set)
-            });
-
-        post_ids
+            post_ids
+        }
     }
 
     fn new_post(&mut self, post_id: PostId, user_id: UserId, mentions: &BTreeSet<UserId>) {
@@ -84,7 +93,8 @@ impl User {
         if user_id == self.user_id {
             self.my_posts.insert(post_id);
         } else if self.following.contains(&user_id)
-            || (mentions.contains(&self.user_id) && !self.blocklist.contains(&user_id) && self.blocklist.is_disjoint(mentions))
+            || (mentions.contains(&self.user_id) && !self.blocklist.contains(&user_id)
+                && self.blocklist.is_disjoint(mentions))
         {
             self.posts.insert(post_id);
         } else {

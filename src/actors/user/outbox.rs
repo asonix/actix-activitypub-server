@@ -6,7 +6,7 @@ use actors::dispatch::messages::{DispatchAnnounce, DispatchMessage};
 use actors::peered::Peered;
 use actors::peered::messages::Message;
 use actors::posts::Posts;
-use actors::posts::messages::{NewPost, DeletePost};
+use actors::posts::messages::{DeletePost, NewPost};
 use actors::users::Users;
 use super::messages::*;
 use super::{User, UserId};
@@ -77,9 +77,9 @@ impl Handler<NewPostOut> for Outbox {
 impl Handler<DeletePost> for Outbox {
     type Result = ();
 
-    fn handle(&mut self, msg: DeletePost, &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: DeletePost, _: &mut Context<Self>) -> Self::Result {
         self.user.send(msg);
-        self.posts.send(msg);
+        self.posts.send(Message::new(msg));
     }
 }
 
@@ -128,8 +128,5 @@ impl Handler<BlockUser> for Outbox {
 
         self.dispatch
             .send(DispatchMessage(Blocked(self.user_id), msg.0));
-
-        let dispatch = self.dispatch;
-        // TODO: finish deleting posts for blocked users.
     }
 }

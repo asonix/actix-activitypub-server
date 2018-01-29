@@ -29,16 +29,16 @@ impl Handler<DeletePost> for User {
 impl Handler<GetPostIds> for User {
     type Result = Result<BTreeSet<PostId>, ()>;
 
-    fn handle(&mut self, _: GetPostIds, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.get_10_post_ids())
+    fn handle(&mut self, msg: GetPostIds, _: &mut Context<Self>) -> Self::Result {
+        Ok(self.get_post_ids(msg.0))
     }
 }
 
 impl Handler<GetUserPostIds> for User {
     type Result = Result<BTreeSet<PostId>, ()>;
 
-    fn handle(&mut self, _: GetUserPostIds, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.get_10_user_post_ids())
+    fn handle(&mut self, msg: GetUserPostIds, _: &mut Context<Self>) -> Self::Result {
+        Ok(self.get_user_post_ids(msg.0))
     }
 }
 

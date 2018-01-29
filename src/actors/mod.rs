@@ -188,7 +188,7 @@ mod tests {
                 // user 1 should own a post
                 let fut = addrs_vec[1]
                     .user()
-                    .call_fut(GetUserPostIds)
+                    .call_fut(GetUserPostIds(10))
                     .map_err(|_| ())
                     .and_then(|res| res)
                     .map(|post_ids| assert!(!post_ids.is_empty()));
@@ -196,7 +196,7 @@ mod tests {
                 // user 0 should have a post in inbox
                 let fut2 = addrs_vec[0]
                     .user()
-                    .call_fut(GetPostIds)
+                    .call_fut(GetPostIds(10))
                     .map_err(|_| ())
                     .and_then(|res| res)
                     .map(|post_ids| assert!(!post_ids.is_empty()));
@@ -204,7 +204,7 @@ mod tests {
                 // user 0 should not own a post
                 let fut3 = addrs_vec[0]
                     .user()
-                    .call_fut(GetUserPostIds)
+                    .call_fut(GetUserPostIds(10))
                     .map_err(|_| ())
                     .and_then(|res| res)
                     .map(|post_ids| assert!(post_ids.is_empty()));
@@ -344,16 +344,16 @@ mod tests {
                         .map_err(|_| ())
                 })
                 .map(|_| Timer::default().sleep(Duration::from_millis(100)))
-                .and_then(|_| {
+                .and_then(move |_| {
                     u1_b.outbox()
                         .call_fut(NewPostOut(BTreeSet::new()))
                         .map_err(|_| ())
                 })
                 .map(|_| Timer::default().sleep(Duration::from_millis(100)))
-                .and_then(|_| {
+                .and_then(move |_| {
                     // user 0 should have a post in inbox
                     u0_b.user()
-                        .call_fut(GetPostIds)
+                        .call_fut(GetPostIds(10))
                         .map_err(|_| ())
                         .and_then(|res| res)
                         .map(|post_ids| assert!(!post_ids.is_empty()))
@@ -361,9 +361,7 @@ mod tests {
                 .map(|_| Timer::default().sleep(Duration::from_millis(100)))
                 .and_then(move |_| {
                     // user 1 blocks user 0
-                    u1_c.outbox()
-                        .call_fut(BlockUser(uid0))
-                        .map_err(|_| ())
+                    u1_c.outbox().call_fut(BlockUser(uid0)).map_err(|_| ())
                 })
                 .map(|_| Timer::default().sleep(Duration::from_millis(100)))
                 .and_then(move |_| {
@@ -376,7 +374,7 @@ mod tests {
                     // user 1 should own two posts
                     let fut = addrs_vec[1]
                         .user()
-                        .call_fut(GetUserPostIds)
+                        .call_fut(GetUserPostIds(10))
                         .map_err(|_| ())
                         .and_then(|res| res)
                         .map(|post_ids| assert_eq!(post_ids.len(), 2));
@@ -384,7 +382,7 @@ mod tests {
                     // user 0 should not have a post in inbox
                     let fut2 = addrs_vec[0]
                         .user()
-                        .call_fut(GetPostIds)
+                        .call_fut(GetPostIds(10))
                         .map_err(|_| ())
                         .and_then(|res| res)
                         .map(|post_ids| assert!(post_ids.is_empty()));
@@ -409,7 +407,7 @@ mod tests {
             // user 1 should own a post
             let fut = addrs_vec[1]
                 .user()
-                .call_fut(GetUserPostIds)
+                .call_fut(GetUserPostIds(10))
                 .map_err(|_| ())
                 .and_then(|res| res)
                 .map(|post_ids| assert!(!post_ids.is_empty()));
@@ -417,7 +415,7 @@ mod tests {
             // user 0 should not have a post in inbox
             let fut2 = addrs_vec[0]
                 .user()
-                .call_fut(GetPostIds)
+                .call_fut(GetPostIds(10))
                 .map_err(|_| ())
                 .and_then(|res| res)
                 .map(|post_ids| assert!(post_ids.is_empty()));
@@ -425,7 +423,7 @@ mod tests {
             // user 2 should not have a post in inbox
             let fut3 = addrs_vec[2]
                 .user()
-                .call_fut(GetPostIds)
+                .call_fut(GetPostIds(10))
                 .map_err(|_| ())
                 .and_then(|res| res)
                 .map(|post_ids| assert!(post_ids.is_empty()));
@@ -455,7 +453,7 @@ mod tests {
             // user 1 owns post
             let fut = addrs_vec[1]
                 .user()
-                .call_fut(GetUserPostIds)
+                .call_fut(GetUserPostIds(10))
                 .map_err(|_| ())
                 .and_then(|res| res)
                 .map(|post_ids| assert!(!post_ids.is_empty()));
@@ -463,7 +461,7 @@ mod tests {
             // user 0 should have a post in inbox
             let fut2 = addrs_vec[0]
                 .user()
-                .call_fut(GetPostIds)
+                .call_fut(GetPostIds(10))
                 .map_err(|_| ())
                 .and_then(|res| res)
                 .map(|post_ids| assert!(!post_ids.is_empty()));
@@ -471,7 +469,7 @@ mod tests {
             // user 2 should have a post in inbox
             let fut3 = addrs_vec[2]
                 .user()
-                .call_fut(GetPostIds)
+                .call_fut(GetPostIds(10))
                 .map_err(|_| ())
                 .and_then(|res| res)
                 .map(|post_ids| assert!(!post_ids.is_empty()));
@@ -479,7 +477,7 @@ mod tests {
             // user 0 should not own a post
             let fut4 = addrs_vec[0]
                 .user()
-                .call_fut(GetUserPostIds)
+                .call_fut(GetUserPostIds(10))
                 .map_err(|_| ())
                 .and_then(|res| res)
                 .map(|post_ids| assert!(post_ids.is_empty()));
@@ -487,7 +485,7 @@ mod tests {
             // user 2 should not own a post
             let fut5 = addrs_vec[2]
                 .user()
-                .call_fut(GetUserPostIds)
+                .call_fut(GetUserPostIds(10))
                 .map_err(|_| ())
                 .and_then(|res| res)
                 .map(|post_ids| assert!(post_ids.is_empty()));
