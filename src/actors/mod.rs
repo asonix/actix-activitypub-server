@@ -9,7 +9,7 @@ use std::cmp::Ordering;
 use std::time::Instant;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Id(u64);
+pub struct Id(pub u64);
 
 pub type PostsId = Id;
 pub type UsersId = Id;

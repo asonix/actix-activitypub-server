@@ -65,6 +65,7 @@ impl Users {
         self.users.insert(user_id, user_address);
     }
 
+    // TODO: Reasoning for passing blocklists but storing posts
     fn new_user(
         &mut self,
         users: SyncAddress<Peered<Users>>,
