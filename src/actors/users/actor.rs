@@ -31,7 +31,7 @@ impl HandleMessage<NewUser> for Users {
         &mut self,
         msg: NewUser,
     ) -> HandleMessageType<Self::Item, (), Self::Broadcast> {
-        let (user_id, user_address) = self.new_user(msg.0);
+        let (user_id, user_address) = self.new_user(msg.0, msg.1);
 
         (Ok(user_id), Some(NewUserFull(user_id, user_address)))
     }

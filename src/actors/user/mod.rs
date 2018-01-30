@@ -15,7 +15,6 @@ pub struct User {
     following: BTreeSet<UserId>,
     follow_requests: BTreeSet<UserId>,
     pending_follows: BTreeSet<UserId>,
-    blocklist: BTreeSet<UserId>,
 }
 
 impl User {
@@ -28,7 +27,6 @@ impl User {
             following: BTreeSet::new(),
             follow_requests: BTreeSet::new(),
             pending_follows: BTreeSet::new(),
-            blocklist: BTreeSet::new(),
         }
     }
 
@@ -92,10 +90,7 @@ impl User {
 
         if user_id == self.user_id {
             self.my_posts.insert(post_id);
-        } else if self.following.contains(&user_id)
-            || (mentions.contains(&self.user_id) && !self.blocklist.contains(&user_id)
-                && self.blocklist.is_disjoint(mentions))
-        {
+        } else if self.following.contains(&user_id) || mentions.contains(&self.user_id) {
             self.posts.insert(post_id);
         } else {
             error!("Should not have recieved post from user {:?}", user_id);
@@ -156,16 +151,8 @@ impl User {
         self.pending_follows.remove(&user_id);
     }
 
-    fn block_user(&mut self, user_id: UserId) {
-        self.blocklist.insert(user_id);
-    }
-
     fn blocked_by(&mut self, user_id: UserId) {
         self.following.remove(&user_id);
         self.pending_follows.remove(&user_id);
-    }
-
-    fn blocklist(&mut self) -> BTreeSet<UserId> {
-        self.blocklist.clone()
     }
 }

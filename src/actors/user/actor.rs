@@ -98,26 +98,10 @@ impl Handler<FollowRequestDenied> for User {
     }
 }
 
-impl Handler<BlockUser> for User {
-    type Result = ();
-
-    fn handle(&mut self, msg: BlockUser, _: &mut Context<Self>) -> Self::Result {
-        self.block_user(msg.0);
-    }
-}
-
 impl Handler<Blocked> for User {
     type Result = ();
 
     fn handle(&mut self, msg: Blocked, _: &mut Context<Self>) -> Self::Result {
         self.blocked_by(msg.0);
-    }
-}
-
-impl Handler<GetBlocklist> for User {
-    type Result = Result<BTreeSet<UserId>, ()>;
-
-    fn handle(&mut self, _: GetBlocklist, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.blocklist())
     }
 }

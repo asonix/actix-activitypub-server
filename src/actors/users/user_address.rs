@@ -1,5 +1,6 @@
 use actix::{Actor, Address, SyncAddress};
 
+use actors::blocklist::Blocklists;
 use actors::peered::Peered;
 use super::{Inbox, Outbox, Posts, User, UserId, Users};
 
@@ -15,11 +16,12 @@ impl UserAddress {
         user_id: UserId,
         posts: SyncAddress<Peered<Posts>>,
         users: SyncAddress<Peered<Users>>,
+        blocklists: SyncAddress<Peered<Blocklists>>,
     ) -> Self {
         let (user_local, user): (Address<_>, SyncAddress<_>) = User::new(user_id).start();
 
         let inbox = Inbox::new(user_local.clone(), users.clone()).start();
-        let outbox = Outbox::new(user_id, user_local, posts, users).start();
+        let outbox = Outbox::new(user_id, user_local, posts, users, blocklists).start();
 
         UserAddress {
             user,

@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use actix::SyncAddress;
 
+use super::blocklist::Blocklists;
 use super::{Id, UserId, UsersId};
 use super::peered::Peered;
 use super::posts::Posts;
@@ -64,10 +65,14 @@ impl Users {
         self.users.insert(user_id, user_address);
     }
 
-    fn new_user(&mut self, users: SyncAddress<Peered<Users>>) -> (UserId, UserAddress) {
+    fn new_user(
+        &mut self,
+        users: SyncAddress<Peered<Users>>,
+        blocklists: SyncAddress<Peered<Blocklists>>,
+    ) -> (UserId, UserAddress) {
         let posts = self.posts.clone();
         let user_id = self.gen_next_id();
-        let user_address = UserAddress::new(user_id, posts, users);
+        let user_address = UserAddress::new(user_id, posts, users, blocklists);
 
         self.add_user(user_id, user_address.clone());
 

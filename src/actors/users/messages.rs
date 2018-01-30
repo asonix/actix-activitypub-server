@@ -2,8 +2,9 @@ use std::collections::BTreeSet;
 
 use actix::SyncAddress;
 
-use super::{UserAddress, UserId, Users};
+use actors::blocklist::Blocklists;
 use actors::peered::Peered;
+use super::{UserAddress, UserId, Users};
 
 #[derive(Clone, Debug)]
 pub struct Lookup(pub UserId);
@@ -12,7 +13,10 @@ pub struct Lookup(pub UserId);
 pub struct LookupMany(pub BTreeSet<UserId>);
 
 #[derive(Clone)]
-pub struct NewUser(pub SyncAddress<Peered<Users>>);
+pub struct NewUser(
+    pub SyncAddress<Peered<Users>>,
+    pub SyncAddress<Peered<Blocklists>>,
+);
 
 #[derive(Clone)]
 pub struct NewUserFull(pub UserId, pub UserAddress);

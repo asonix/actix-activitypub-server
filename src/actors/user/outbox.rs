@@ -1,6 +1,8 @@
 use actix::{Actor, Address, Arbiter, Context, Handler, SyncAddress};
 use futures::Future;
 
+use actors::blocklist::Blocklists;
+use actors::blocklist::messages::Block;
 use actors::dispatch::Dispatch;
 use actors::dispatch::messages::{DispatchAnnounce, DispatchMessage};
 use actors::peered::Peered;
@@ -16,6 +18,7 @@ pub struct Outbox {
     user: Address<User>,
     posts: SyncAddress<Peered<Posts>>,
     dispatch: Address<Dispatch>,
+    blocklists: SyncAddress<Peered<Blocklists>>,
 }
 
 impl Outbox {
@@ -24,14 +27,16 @@ impl Outbox {
         user: Address<User>,
         posts: SyncAddress<Peered<Posts>>,
         users: SyncAddress<Peered<Users>>,
+        blocklists: SyncAddress<Peered<Blocklists>>,
     ) -> Self {
-        let dispatch = Dispatch::new(users).start();
+        let dispatch = Dispatch::new(users, blocklists.clone()).start();
 
         Outbox {
             user_id,
             user,
             posts,
             dispatch,
+            blocklists,
         }
     }
 }
@@ -63,6 +68,7 @@ impl Handler<NewPostOut> for Outbox {
 
                     dispatch.send(DispatchAnnounce(
                         NewPostIn(post_id, user_id, mentions),
+                        user_id,
                         recipients,
                     ));
                 }
@@ -93,8 +99,11 @@ impl Handler<RequestFollow> for Outbox {
         );
         self.user.send(msg);
 
-        self.dispatch
-            .send(DispatchMessage(FollowRequest(self.user_id), msg.0));
+        self.dispatch.send(DispatchMessage(
+            FollowRequest(self.user_id),
+            self.user_id,
+            msg.0,
+        ));
     }
 }
 
@@ -104,8 +113,11 @@ impl Handler<AcceptFollowRequest> for Outbox {
     fn handle(&mut self, msg: AcceptFollowRequest, _: &mut Context<Self>) -> Self::Result {
         self.user.send(msg);
 
-        self.dispatch
-            .send(DispatchMessage(FollowRequestAccepted(self.user_id), msg.0));
+        self.dispatch.send(DispatchMessage(
+            FollowRequestAccepted(self.user_id),
+            self.user_id,
+            msg.0,
+        ));
     }
 }
 
@@ -115,8 +127,11 @@ impl Handler<DenyFollowRequest> for Outbox {
     fn handle(&mut self, msg: DenyFollowRequest, _: &mut Context<Self>) -> Self::Result {
         self.user.send(msg);
 
-        self.dispatch
-            .send(DispatchMessage(FollowRequestDenied(self.user_id), msg.0));
+        self.dispatch.send(DispatchMessage(
+            FollowRequestDenied(self.user_id),
+            self.user_id,
+            msg.0,
+        ));
     }
 }
 
@@ -124,9 +139,10 @@ impl Handler<BlockUser> for Outbox {
     type Result = ();
 
     fn handle(&mut self, msg: BlockUser, _: &mut Context<Self>) -> Self::Result {
-        self.user.send(msg);
-
         self.dispatch
-            .send(DispatchMessage(Blocked(self.user_id), msg.0));
+            .send(DispatchMessage(Blocked(self.user_id), self.user_id, msg.0));
+
+        self.blocklists
+            .send(Message::new(Block(self.user_id, msg.0)));
     }
 }

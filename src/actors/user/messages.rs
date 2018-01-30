@@ -117,11 +117,3 @@ impl ResponseType for Blocked {
     type Item = ();
     type Error = ();
 }
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct GetBlocklist;
-
-impl ResponseType for GetBlocklist {
-    type Item = BTreeSet<UserId>;
-    type Error = ();
-}

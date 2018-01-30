@@ -1,3 +1,4 @@
+pub mod blocklist;
 pub mod dispatch;
 pub mod peered;
 pub mod posts;
@@ -82,6 +83,8 @@ mod tests {
     use futures::stream::iter_ok;
     use tokio_timer::Timer;
 
+    use super::blocklist::Blocklists;
+    use super::blocklist::messages::CanSpeak;
     use super::{Id, UserId};
     use super::peered::Peered;
     use super::peered::messages::{Message, PeerSize};
@@ -112,9 +115,11 @@ mod tests {
         let ping_3 = users_1.call_fut(Message::new(UserSize));
         let ping_4 = users_2.call_fut(Message::new(UserSize));
 
-        let new_u1 = Message::new(NewUser(users_1.clone()));
+        let blocklists: SyncAddress<_> = Peered::new(Blocklists::new()).start();
+
+        let new_u1 = Message::new(NewUser(users_1.clone(), blocklists.clone()));
         let u1 = users_1.call_fut(new_u1).map_err(|_| ()).and_then(|res| res);
-        let new_u2 = Message::new(NewUser(users_2.clone()));
+        let new_u2 = Message::new(NewUser(users_2.clone(), blocklists.clone()));
         let u2 = users_2.call_fut(new_u2).map_err(|_| ()).and_then(|res| res);
 
         let duration = Duration::from_millis(200);
@@ -319,12 +324,12 @@ mod tests {
 
     #[test]
     fn test_new_users() {
-        with_users(|_, _| future::result(Ok(())))
+        with_users(|_, _, _| future::result(Ok(())))
     }
 
     #[test]
     fn test_blocked_user_doesnt_receive_post() {
-        with_users(|ids_vec, addrs_vec| {
+        with_users(|ids_vec, addrs_vec, blocklists| {
             let u0_a = addrs_vec[0].clone();
             let u0_b = addrs_vec[0].clone();
             let uid0 = ids_vec[0];
@@ -332,10 +337,23 @@ mod tests {
             let u1_b = u1_a.clone();
             let u1_c = u1_a.clone();
             let u1_d = u1_a.clone();
+            let uid1 = ids_vec[1];
+
+            let blocklists_clone = blocklists.clone();
+
             // User 0 requests to follow User 1
             u0_a.outbox()
                 .call_fut(RequestFollow(ids_vec[1]))
                 .map_err(|_| ())
+                .and_then(move |_| {
+                    // user 0 and user 1 have no established blocks
+                    blocklists
+                        .clone()
+                        .call_fut(Message::new(CanSpeak(uid0, uid1)))
+                        .map_err(|_| ())
+                        .and_then(|res| res)
+                        .map(|can_speak| assert!(can_speak))
+                })
                 .map(|_| Timer::default().sleep(Duration::from_millis(100)))
                 .and_then(move |_| {
                     // user 1 accepts user 0's follow request
@@ -387,14 +405,21 @@ mod tests {
                         .and_then(|res| res)
                         .map(|post_ids| assert!(post_ids.is_empty()));
 
-                    fut.and_then(|_| fut2)
+                    // user 1 and user 0 have a block separating them
+                    let fut3 = blocklists_clone
+                        .call_fut(Message::new(CanSpeak(uid0, uid1)))
+                        .map_err(|_| ())
+                        .and_then(|res| res)
+                        .map(|can_speak| assert!(!can_speak));
+
+                    fut.and_then(|_| fut2).and_then(|_| fut3)
                 })
         })
     }
 
     #[test]
     fn test_no_follow_and_no_post_propagation() {
-        with_users(|ids_vec, addrs_vec| {
+        with_users(|ids_vec, addrs_vec, _| {
             // User 0 requests to follow User 1
             addrs_vec[0].outbox().send(RequestFollow(ids_vec[1]));
 
@@ -434,7 +459,7 @@ mod tests {
 
     #[test]
     fn test_follow_and_post_propagation() {
-        with_users(|ids_vec, addrs_vec| {
+        with_users(|ids_vec, addrs_vec, _| {
             // User 0 requests to follow User 1
             addrs_vec[0].outbox().send(RequestFollow(ids_vec[1]));
 
@@ -496,7 +521,7 @@ mod tests {
 
     fn with_users<F, G>(f: F)
     where
-        F: FnOnce(Vec<UserId>, Vec<UserAddress>) -> G + 'static,
+        F: FnOnce(Vec<UserId>, Vec<UserAddress>, SyncAddress<Peered<Blocklists>>) -> G + 'static,
         G: Future<Item = (), Error = ()>,
     {
         let system = System::new("test");
@@ -504,11 +529,15 @@ mod tests {
 
         let posts: SyncAddress<_> = Peered::new(Posts::new(Id(0))).start();
         let users: SyncAddress<_> = Peered::new(Users::new(Id(0), posts)).start();
+        let blocklists: SyncAddress<_> = Peered::new(Blocklists::new()).start();
+        let blocklists_clone = blocklists.clone();
 
         let users_clone = users.clone();
 
         let user_addrs_fut = iter_ok(0..3)
-            .and_then(move |_| users.call_fut(Message::new(NewUser(users.clone()))))
+            .and_then(move |_| {
+                users.call_fut(Message::new(NewUser(users.clone(), blocklists.clone())))
+            })
             .map_err(|_| ())
             .and_then(|res| res)
             .and_then(move |user_id| {
@@ -524,7 +553,7 @@ mod tests {
             })
             .and_then(|users| {
                 let (ids, addrs) = users.into_iter().unzip();
-                f(ids, addrs);
+                f(ids, addrs, blocklists_clone);
                 Ok(())
             });
 

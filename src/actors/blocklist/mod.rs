@@ -17,11 +17,13 @@ impl Blocklists {
     }
 
     fn block_user(&mut self, active_user: UserId, blocked_user: UserId) {
-        self.lists.entry(active_user)
+        self.lists
+            .entry(active_user)
             .or_insert(HashSet::new())
             .insert(blocked_user);
 
-        self.inverses.entry(blocked_user)
+        self.inverses
+            .entry(blocked_user)
             .or_insert(HashSet::new())
             .insert(active_user);
     }
@@ -37,14 +39,14 @@ impl Blocklists {
             self.lists.remove(&active_user);
         }
 
-        let is_empty = self.inverses.get_mut(&blocked_user).map(|inverse| {
+        let is_empty = self.inverses.get_mut(&unblocked_user).map(|inverse| {
             inverse.remove(&active_user);
 
             inverse.is_empty()
         });
 
         if let Some(true) = is_empty {
-            self.inverses.remove(&blocked_user);
+            self.inverses.remove(&unblocked_user);
         }
     }
 
@@ -53,7 +55,23 @@ impl Blocklists {
     }
 
     fn is_blocked_by(&self, user_id: UserId) -> HashSet<UserId> {
-        self.inverses.get(&user_id).cloned().unwrap_or(HashSet::new())
+        self.inverses
+            .get(&user_id)
+            .cloned()
+            .unwrap_or(HashSet::new())
+    }
+
+    fn can_interact(&self, user_1: UserId, user_2: UserId) -> bool {
+        let one_blocks_two = self.lists
+            .get(&user_1)
+            .map(|list| list.contains(&user_2))
+            .unwrap_or(false);
+        let two_blocks_one = self.lists
+            .get(&user_2)
+            .map(|list| list.contains(&user_1))
+            .unwrap_or(false);
+
+        !(one_blocks_two || two_blocks_one)
     }
 }
 
@@ -71,7 +89,12 @@ impl PeeredInner for Blocklists {
     type Request = usize;
 
     fn backfill(&self, req: Self::Request) -> Self::Backfill {
-        self.lists.iter().skip(req).take(10).cloned().collect()
+        self.lists
+            .iter()
+            .skip(req)
+            .take(10)
+            .map(|(uid, set)| (uid.clone(), set.clone()))
+            .collect()
     }
 
     fn backfill_init(&self) -> Self::Request {
@@ -81,14 +104,18 @@ impl PeeredInner for Blocklists {
     fn handle_backfill(&mut self, backfill: Self::Backfill) -> Option<Self::Request> {
         for (user, blocklist) in backfill {
             for blocked_user in &blocklist {
-                self.inverses.entry(*blocked_user)
+                self.inverses
+                    .entry(*blocked_user)
                     .or_insert(HashSet::new())
                     .insert(user);
             }
 
-            self.lists.entry(backfill)
+            self.lists
+                .entry(user)
                 .or_insert(HashSet::new())
                 .extend(blocklist);
         }
+
+        None
     }
 }

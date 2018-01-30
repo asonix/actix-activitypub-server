@@ -5,7 +5,7 @@ use actix::ResponseType;
 use super::UserId;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DispatchMessage<T>(pub T, pub UserId)
+pub struct DispatchMessage<T>(pub T, pub UserId, pub UserId)
 where
     T: Send + 'static;
 
@@ -18,7 +18,7 @@ where
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DispatchAnnounce<T>(pub T, pub BTreeSet<UserId>)
+pub struct DispatchAnnounce<T>(pub T, pub UserId, pub BTreeSet<UserId>)
 where
     T: Clone + Send + 'static;
 
