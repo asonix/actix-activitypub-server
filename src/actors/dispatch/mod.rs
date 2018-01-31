@@ -1,4 +1,4 @@
-use actix::{Actor, ActorFuture, Context, Handler, ResponseType, ResponseFuture, SyncAddress};
+use actix::{Actor, ActorFuture, Context, Handler, ResponseFuture, ResponseType, SyncAddress};
 use actix::fut::result;
 
 use super::blocklist::Blocklists;
@@ -53,9 +53,7 @@ where
             })
             .map_err(|e, _, _| error!("Error: {}", e))
             .and_then(|(addr_result, speak_result), _, _| {
-                let res = addr_result.and_then(|addr| {
-                    speak_result.map(|speak| (addr, speak))
-                });
+                let res = addr_result.and_then(|addr| speak_result.map(|speak| (addr, speak)));
 
                 result(res)
             })
@@ -85,14 +83,14 @@ where
         let fut = self.blocklists
             .call(self, Message::new(GetBlocklist(source)))
             .and_then(move |blocklist_res, dispatch, _| {
-                blocklists.call(dispatch, Message::new(GetBlockedBy(source)))
+                blocklists
+                    .call(dispatch, Message::new(GetBlockedBy(source)))
                     .map(|blocked_by_res, _, _| (blocklist_res, blocked_by_res))
             })
             .map_err(|e, _, _| error!("Error: {}", e))
             .and_then(|(blocklist_res, blocked_by_res), _, _| {
-                let res = blocklist_res.and_then(|blocklist| {
-                    blocked_by_res.map(|blocked_by| (blocklist, blocked_by))
-                });
+                let res = blocklist_res
+                    .and_then(|blocklist| blocked_by_res.map(|blocked_by| (blocklist, blocked_by)));
 
                 result(res)
             })
