@@ -49,10 +49,13 @@ fn new_post(req: HttpRequest<BasicState>) -> Box<Future<Item = HttpResponse, Err
         .users
         .call_fut(Message::new(Lookup(uid)))
         .and_then(|res| Ok(res.unwrap()))
-        .map(|u_addr| {
-            u_addr.outbox().send(NewPostOut(BTreeSet::new()));
+        .and_then(|u_addr| {
+            u_addr
+                .outbox()
+                .call_fut(NewPostOut(BTreeSet::new()))
+                .and_then(|res| Ok(res.unwrap()))
         })
-        .and_then(|_| Ok(httpcodes::HTTPOk.with_body("created".to_owned())))
+        .and_then(|post_id| Ok(httpcodes::HTTPOk.with_body(format!("{:?}", post_id))))
         .from_err()
         .responder()
 }
