@@ -1,5 +1,5 @@
-use actix::{Actor, Address, Arbiter, Context, Handler, SyncAddress};
-use futures::Future;
+use actix::{Actor, ActorFuture, Address, Context, Handler, ResponseFuture, SyncAddress};
+use actix::fut::result;
 
 use actors::blocklist::Blocklists;
 use actors::blocklist::messages::Block;
@@ -46,37 +46,47 @@ impl Actor for Outbox {
 }
 
 impl Handler<NewPostOut> for Outbox {
-    type Result = ();
+    type Result = ResponseFuture<Self, NewPostOut>;
 
     fn handle(&mut self, msg: NewPostOut, _: &mut Context<Self>) -> Self::Result {
         let mentions = msg.0;
         let dispatch = self.dispatch.clone();
         let user = self.user.clone();
+        let user_2 = user.clone();
         let user_id = self.user_id;
         debug!("user {:?} is creating a new post", user_id);
 
-        let fut = self.posts
-            .call_fut(Message::new(NewPost(user_id, mentions.clone())))
-            .join(self.user.call_fut(GetFollowers))
-            .map_err(|e| error!("Error: {}", e))
-            .and_then(move |(post_result, followers_result)| {
-                let res = post_result.and_then(|pid| followers_result.map(|f| (pid, f)));
+        let post_message = Message::new(NewPost(user_id, mentions.clone()));
 
-                if let Ok((post_id, recipients)) = res {
-                    debug!("Dispatching {:?} to recipients: {:?}", post_id, recipients);
-                    user.send(NewPostIn(post_id, user_id, mentions.clone()));
+        let a_fut = self.posts
+            .call(self, post_message)
+            .map_err(|e, _, _| error!("Error: {}", e))
+            .and_then(move |post_id_res, outbox, _| {
+                user_2
+                    .call(outbox, GetFollowers)
+                    .map_err(|e, _, _| error!("Error: {}", e))
+                    .and_then(move |followers_res, _, _| result(Ok((post_id_res, followers_res))))
+            })
+            .and_then(|(post_id_res, followers_res), _, _| {
+                let res = post_id_res
+                    .and_then(|post_id| followers_res.map(|followers| (post_id, followers)));
 
-                    dispatch.send(DispatchAnnounce(
-                        NewPostIn(post_id, user_id, mentions),
-                        user_id,
-                        recipients,
-                    ));
-                }
+                result(res)
+            })
+            .map(move |(post_id, followers), _, _| {
+                debug!("Dispatching {:?} to followers: {:?}", post_id, followers);
+                user.send(NewPostIn(post_id, user_id, mentions.clone()));
 
-                Ok(())
+                dispatch.send(DispatchAnnounce(
+                    NewPostIn(post_id, user_id, mentions.clone()),
+                    user_id,
+                    followers,
+                ));
+
+                post_id
             });
 
-        Arbiter::handle().spawn(fut);
+        Box::new(a_fut)
     }
 }
 

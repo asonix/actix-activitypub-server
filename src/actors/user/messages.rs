@@ -18,7 +18,7 @@ impl ResponseType for NewPostIn {
 pub struct NewPostOut(pub BTreeSet<UserId>);
 
 impl ResponseType for NewPostOut {
-    type Item = ();
+    type Item = PostId;
     type Error = ();
 }
 
